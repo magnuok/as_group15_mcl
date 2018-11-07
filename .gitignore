@@ -303,5 +303,7 @@ fabric.properties
 **/.idea/workspace.xml 
 **/.idea/tasks.xml
 
+.idea/
+
 # Sonarlint plugin
 .idea/sonarlint
