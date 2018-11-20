@@ -307,3 +307,9 @@ fabric.properties
 
 # Sonarlint plugin
 .idea/sonarlint
+
+# ignores magnusses folders
+launchfile/
+myscript
+onlyPioneer
+ros_ws/
