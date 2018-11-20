@@ -1,3 +1,7 @@
+import math
+import numpy
+
+
 class mcl:
     """
     Class description
@@ -29,8 +33,7 @@ class mcl:
         """
         self._particles = particles
 
-
-    def _calculate_new_particle_list(self, particles, odometry, laser_points, map):
+    async def _calculate_new_particle_list(self, old_particles, odometry, laser_points, map):
         """
         calculates new particles based on Monte Carlo Localization.
         :param particles: The old list of particles
@@ -39,35 +42,82 @@ class mcl:
         :param map: the map we want to localize the robot in.
         :return: the new list of particles.
         """
+        # the new particles
+        particle_list = []
+
+        # the old_particles after applying the motion_model to them
+        pose_list = []
+
+        # the weights of the old_particles after applying the motion_model to them
+        weight_list = []
+
+        # for each particle in old_particle
+        for particle in old_particles:
+            # get new poses after applying the motion_model
+            pose_list.append(type(self).sample_motion_model_odometry(odometry, particle))
+
+            # get weights corresponding to the new pose_list
+            weight_list.append(type(self).measurement_model(laser_points, pose_list, map))
+
+        # return the new set of particles
+        self._async_callback(particle_list)
+
+    @classmethod
+    def sample_motion_model_odometry(cls, odometry, x_last):
+        """
+        Not sure if it's correct to specify this as a classmethod. Same goes for staticmethod underneath.
+
+        Implementation of the sample_motion_model_odometry as described in
+        https://docs.google.com/document/d/1EY1oFbIIb8Ac_3VP40dt_789sVhlVjovoN9eT78llkQ/edit
+        :param odometry: a tuple of movement (x, y, theta) where x and y is distance in the plane, and theta is the
+        rotation.
+        :param x_last: a tuple of old position (x, y, theta) where x and y is position in the plane, and theta is the
+        orientation
+        :return: returns a tuple which represents the new position (x, y, theta) where x and y is position in the plane,
+        and theta is the orientation
+        """
+
+        # TODO: find out what these values should be
+        # TODO: maybe move these to the top of the class, or the top of the module
+        # constants
+        ALFA_1 = 0.1;
+        ALFA_2 = 0.1;
+        ALFA_3 = 0.1;
+        ALFA_4 = 0.1;
+
+        delta_rot_1 = numpy.arctan2(odometry[1], odometry[0])
+        delta_trans = math.sqrt(odometry[0] ^ 2 + odometry[1] ^ 2)
+        delta_rot_2 = odometry[2] - delta_rot_1
+
+        delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
+        delta_trans_hat = delta_trans - cls.sample(abs(ALFA_3 * delta_trans + ALFA_4 * (delta_rot_1 + delta_rot_2)))
+        delta_rot_2_hat = delta_rot_2 - cls.sample(abs(ALFA_1 * delta_rot_2 + ALFA_2 * delta_trans))
+
+        x = x_last[0] + delta_trans_hat * math.cos(x_last[2] + delta_rot_1)
+        y = x_last[1] + delta_trans_hat * math.sin(x_last[2] + delta_rot_1)
+        theta = x_last[2] + delta_rot_1_hat + delta_rot_2_hat
+
+        return x, y, theta
+
+    @classmethod
+    def measurement_model(cls, laser_points, particles, map):
+        """
+
+        :param laser_points:
+        :param particles:
+        :param map:
+        :return:
+        """
         pass
 
-
-
-
-    # def mcl(X_previous, u, z, map):
-    #
-    #     X = []
-    #
-    #     X_bar = []
-    #     W = []
-    #     # X_bar = {}
-    #     M = 100
-    #
-    #     for m in range(0, len(X_previous)):
-    #         x = sample_motion_model(u, X_previous[m])
-    #         w = measurement_model(z, x, map)
-    #         X_bar.append(x)
-    #         W.append(w)
-    #         # X_bar[x] = w
-    #
-    #     # Before resampling:
-    #     # Check the number of effective particles
-    #     n_eff = 1. / sum([w * w for w in W])
-    #     if n_eff < M / 2 and set(X) != set(X_previous):
-    #         X = low_variance_sample(X_bar, W)
-    #     else:
-    #         X = X_previous
-    #     return X
+    @staticmethod
+    def sample(standard_deviation):
+        """
+        :param standard_deviation: standard deviation.
+        :return: A number chosen randomly from the normal distribution with center in 0 and standard deviation =
+        standard_deviation
+        """
+        return numpy.random.normal(loc=0, scale=standard_deviation, size=None)
 
     def _sample_motion_model(self, ):
         pass
