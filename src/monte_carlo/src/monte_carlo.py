@@ -115,7 +115,7 @@ class MonteCarlo:
 
     def callback_map(self, occupancy_grid_msg):
         """
-
+        Callback function used by a ros subscriber. Retrieves the map and saves it to a list + map object.
         :param occupancy_grid_msg:
         :return:
         """
@@ -126,9 +126,7 @@ class MonteCarlo:
 
     def initialize_particles(self):
         """
-
-        :param:
-        :return:
+        Method that initialize the particles according to map
         """
 
         # Dimensions
@@ -183,6 +181,10 @@ class MonteCarlo:
                 (particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def publish_pose_array(self):
+        """
+        Method that continously publish particles transformed to poses to /PoseArray topic
+
+        """
         pub = rospy.Publisher('/PoseArray', PoseArray, queue_size=10)
         rate = rospy.Rate(2)  # Every 1/f seconds
 
@@ -199,6 +201,11 @@ class MonteCarlo:
             rate.sleep()
 
     def _create_pose(self, particle):
+        """
+        Retrives a particle and transforms to Pose object. Used to publish particles to rviz through /PoseArray topic
+        :param particle: particle tuppel =(x, y, theta)
+        :return pose: Pose object
+        """
         pose = Pose()
         # Add x,y,z position to pose
         pose.position.x = particle[0]
@@ -226,7 +233,7 @@ if __name__ == '__main__':
 
     #rospy.Subscriber("/RosAria/pose", Odometry, mcl.callback_odometry)
     #rospy.Subscriber("/scan", LaserScan, mcl.callback_laser)
-    #mcl.publish_pose_array()
+    mcl.publish_pose_array()
     rospy.spin()
 
 
