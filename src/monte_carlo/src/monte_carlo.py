@@ -10,7 +10,8 @@ from sensor_msgs.msg import LaserScan
 import random
 import math
 import numpy
-import time  # TEST
+import time
+import scipy.integrate # joakim
 
 
 class MonteCarlo:
@@ -81,7 +82,7 @@ class MonteCarlo:
             predicted_particles_list.append(type(self).sample_motion_model_odometry(odometry, particle))
 
             # get weights corresponding to the new pose_list
-            weight_list.append(type(self).measurement_model(laser_points, predicted_particles_list, map))
+            weight_list.append(type(self).measurement_model(laser_points, particle, map))
 
         # sample the new particles
         particle_list = type(self).low_variance_sampler(predicted_particles_list, weight_list)
@@ -126,16 +127,191 @@ class MonteCarlo:
 
         return x, y, theta
 
-    @classmethod
-    def measurement_model(cls, laser_points, particles, map):
+    def measurement_model(self, laser_points, predicted_particle, map):
         """
-
-        :param laser_points:
-        :param particles:
-        :param map:
+        Beam range finder model. Function returns the wheoghts of a particle
+        :param laser_points: measurement values at time t, list
+        :param predicted_particle: state (pose) at time t (x and y - coordinates and theta)
+        :param map: grid map, list of values representing occupancy
         :return:
         """
-        pass
+
+        ### predicted_particle = (x, y, theta)
+
+        sigma = 0.5
+        q = 1
+        K = len(laser_points)  # number of measurements
+
+        zmax = 5.6  # maximum sensor range [m]
+        theta_k = -numpy.pi / 2  # initial value of measurement angle
+        delta_theta = numpy.pi / 512  # degree change for each measurement. 512 points in one scan
+
+        # weights of the elements
+        z_hit = 0.9
+        z_max = 0.1
+        # initial values
+        p_hit = 1
+        p_max = 1
+
+        # each measurement laser_points[k] is related to degree from -90 to 90 (given 180 degree range)
+        # for loop through all the measurements laser_points
+        # laser_points [m]
+        # Scanning direction: counterclockwise from Top view
+        for k in K:
+            z_t = laser_points[k]  # measurement k
+            theta_k = theta_k + delta_theta  # need the relative direction of the measurement z_t
+            z_t_star = self.ray_casting(predicted_particle, theta_k, map, zmax)   # Real value for measurement k using ray casting
+
+            if z_t == z_max:
+                p_hit = 0
+                p_max = 1
+            elif z_t > z_max:
+                p_hit = 0
+            else:
+                # integrate over z_t, integrate.quad gives two values (the integral sum and the error),
+                # we are only interested in the integral.
+                eta = 1 / (scipy.integrate.quad(self.gaussian, 0, zmax, args=(sigma, z_t_star))[0])
+                p_hit = eta * self.gaussian(sigma, z_t_star, z_t)
+                p_max = 0
+
+            p = z_hit * p_hit + z_max * p_max
+            q = p * q
+
+        return q
+
+    @staticmethod
+    def gaussian(sigma, z_t_star, z_t):
+        """
+        Sub function of measurement_model calculating the Gaussian
+        :param z_t_star:
+        :param z_t:
+        :return:
+        """
+        return 1 / numpy.sqrt(2 * numpy.pi * sigma ** 2) * numpy.exp(-0.5 * ((z_t_star - z_t) ** 2) / (sigma ** 2))
+
+    def ray_casting(self, predicted_particle, theta_k, map, zmax):
+        """
+        Sub function of measurement_model using current state (pose of robot) and map to calculate true value of a measurement z_t
+        :param theta_k:
+        :param map:
+        :param zmax:
+        :return: true distance in meter to obstacle/occupied grid
+        """
+        x_0 = predicted_particle[0]
+        y_0 = predicted_particle[1]
+        theta = predicted_particle[2] + theta_k  # Need to know the angel of both robot and measurement to know in which direction to ray cast.
+        distance = zmax  # initialize shortest distance to occupied grid as maximal value
+        m_size = len(map)  # map size
+        max_map_value = zmax  # the maximum value in the map given the particle
+        map_occupancy_val = 80  # value to identify occupancy
+        if x_0 < max_map_value / 2 and y_0 < max_map_value / 2:
+            x_max = m_size - x_0
+            y_max = m_size - y_0
+        elif x_0 > max_map_value / 2 and y_0 > max_map_value / 2:
+            x_max = x_0
+            y_max = y_0
+        elif x_0 < max_map_value / 2 and y_0 > max_map_value / 2:
+            x_max = m_size - x_0
+            y_max = y_0
+        else:
+            x_max = x_0
+            y_max = m_size - y_0
+
+        max_map_value = numpy.sqrt(y_max ** 2 + x_max ** 2)
+
+        # Uses max_map_value to find end points to use in the bresenham algorithm
+        # numpy.cos() and numpy.sin() uses radians.
+        x_end = x_0 + round(max_map_value * numpy.cos(theta))
+        y_end = y_0 + round(max_map_value * numpy.sin(theta))
+
+        # Gets grids between start and end points
+        grids = self.bresenham(x_0, y_0, x_end, y_end)
+
+        # find the maximum x and y value the first occupied grid may have.
+
+        # Start going through the grids provided by Bresenham and when we find a grid with higher occupance probability
+        # value we calculate and return the distance to this value
+        # We assume that Bresnham returns an array of grids where the distance from x_0 and y_0 increases. TEST THIS
+        for grid in grids:
+            x_1 = grid[0]
+            y_1 = grid[1]
+            # occupancy value in map of the given grid
+            occupancy_val = self.get_grid_position(x_1, y_1, map)
+            if map_occupancy_val < occupancy_val: #TODO krokodille
+                distance = numpy.sqrt((x_1 - x_0) ** 2 + (y_1 - y_0) ** 2)
+                break
+        # return distance in meter
+        return distance * self._occupancy_grid_msg.info.resolution
+
+    @staticmethod
+    def get_grid_position(self, row, column, map):
+        #TODO: check that this is right with col and row
+        width = self._occupancy_grid_msg.info.width
+        return map[row*width + column]
+
+    def bresenham(self, x_0, y_0, x_end, y_end):
+        """
+        Sub function of ray_casting used for calculations of true value of z_t
+        :param y_0:
+        :param x_end:
+        :param y_end:
+        :return:
+        """
+        # Bresenham returns all the x-y coordinates of grids between (x_0, y_0) and (x_end, y_end)
+        # The end points will post likely go outside of our grid map (keep in mind)
+        dx = x_end - x_0
+        dy = y_end - y_0
+
+        # if the thetha is over 45 degrees we rotate the line (mirror the line)
+        is_steep = abs(dx) < abs(dy)
+
+        if is_steep:
+            x_0, y_0 = y_0, x_0
+            x_end, y_end = y_end, x_end
+
+        # checks if dx is negative, if so rotates the line again => we always look at a line going in positive x direction
+        # if dx is negative we change the direction of the "arrow"
+        swapped = False
+        if x_0 > x_end:
+            x_0, x_end = x_end, x_0
+            y_0, y_end = y_end, y_0
+            swapped = True
+
+        dx = x_end - x_0
+        dy = y_end - y_0
+
+        # initial value of error
+        error = dx / 2
+
+        if y_0 < y_end:
+            y_step = 1
+        else:
+            y_step = -1
+
+        # initial y-value to start point
+        y = y_0
+        # empty array of grid coordinates
+        grids = []
+
+        # iterates over x-coordinates (may be y-coordinates, if is_steep = true)
+        # iterates over each x between x_0 and x_end
+        # The error first get subtracted
+        for x in range(x_0, x_end + 1):
+            if is_steep:
+                coord = (y, x)
+            else:
+                coord = (x, y)
+            grids.append(coord)
+            error -= abs(dy)
+            if error < 0:
+                y += y_step
+                error += dx
+
+        # reverse back list if they were reversed.
+        if swapped:
+            grids.reverse()
+
+        return grids
 
     @staticmethod
     def sample(standard_deviation):
@@ -333,7 +509,4 @@ if __name__ == '__main__':
         pass
     mcl.initialize_particles()
 
-    # rospy.Subscriber("/RosAria/pose", Odometry, mcl.callback_odometry)
-    # rospy.Subscriber("/scan", LaserScan, mcl.callback_laser)
-    # mcl.publish_pose_array()
     rospy.spin()
