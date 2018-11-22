@@ -75,14 +75,12 @@ class MonteCarlo:
         """
         # the new particles
         particle_list = []
-
         # the old_particles after applying the motion_model to them
         pose_list = []
-
         # the weights of the old_particles after applying the motion_model to them
         weight_list = []
 
-        # for each particle in old_particle
+        # motion and measurement model
         for particle in old_particles:
             # get new poses after applying the motion_model
             pose_list.append(type(self).sample_motion_model_odometry(odometry, particle))
@@ -90,8 +88,11 @@ class MonteCarlo:
             # get weights corresponding to the new pose_list
             weight_list.append(type(self).measurement_model(laser_points, pose_list, map))
 
+        # sample the new particles
+        particle_list = type(self).low_variance_sampler(pose_list, weight_list)
+
         # return the new set of particles
-        self._async_callback(particle_list)
+        self._particles = particle_list
 
     @classmethod
     def sample_motion_model_odometry(cls, odometry, x_last):
@@ -149,6 +150,21 @@ class MonteCarlo:
         standard_deviation
         """
         return numpy.random.normal(loc=0, scale=standard_deviation, size=None)
+
+    @staticmethod
+    def low_variance_sampler(particles, weights):
+        new_particle_list = []
+        r = random.random()*(1./(len(particles)))
+        c = weights[0]
+        i = 0
+
+        for m in range(1,len(particles)+1):
+            u = r + (m-1)*(1./(len(particles)))
+            while u > c:
+              i += 1
+              c += weights[i]
+            new_particle_list.append(particles[i])
+        return new_particle_list
 
     def callback_map(self, occupancy_grid_msg):
         """
