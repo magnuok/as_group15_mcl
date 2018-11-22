@@ -19,10 +19,9 @@ class MonteCarlo:
     _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scans
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
     _map = []   # Contains list of cells in map
-    _particles = []   # List with particle tuples = (x,y, theta)
+    _particles = []   # List with particle tuples = (x, y, theta)
     _pose_array = PoseArray()
-
-    _occupancy_grid_msg = OccupancyGrid()
+    _occupancy_grid_msg = OccupancyGrid() #TEST
 
 
     def callback_odometry(self, odom_msg):
@@ -125,7 +124,6 @@ class MonteCarlo:
         rospy.loginfo("MAP: " +str(self._map))
         self._occupancy_grid_msg = occupancy_grid_msg
 
-
     def initialize_particles(self):
         """
 
@@ -133,7 +131,7 @@ class MonteCarlo:
         :return:
         """
 
-        # Dimentions
+        # Dimensions
         resolution = self._occupancy_grid_msg.info.resolution
         width = self._occupancy_grid_msg.info.width
 
@@ -224,6 +222,7 @@ if __name__ == '__main__':
     while len(mcl._map) == 0:
         pass
     mcl.initialize_particles()
+
 
     #rospy.Subscriber("/RosAria/pose", Odometry, mcl.callback_odometry)
     #rospy.Subscriber("/scan", LaserScan, mcl.callback_laser)
