@@ -66,14 +66,6 @@ class MonteCarlo:
         #rospy.loginfo("%s", len(self._laser_point_list))
 
 
-    def _async_callback(self, particles):
-        """
-        used by calculate_new_particle_set to return particles from the asynchronous call. Saves the result to _particles
-        :param particles: a new set of particles
-        """
-        self._particles = particles
-
-
     def _calculate_new_particle_list(self, particles, odometry, laser_points, map):
         """
         calculates new particles based on Monte Carlo Localization.
