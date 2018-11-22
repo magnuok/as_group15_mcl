@@ -43,21 +43,21 @@ class MonteCarlo:
         self._pose_array.header.frame_id = "map"
 
     def loop(self):
-
         # rate = rospy.Rate(1) #Every 1/frequency seconds. Input freq
 
         # While not mcl is terminated by user
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
             if self._new_odometry and self._new_laser_data:
+                self._new_laser_data = False
+                self._new_odometry = False
                 self._particles = self._update_particle_list(self._particles, self._odometry, self._laser_point_list,
                                                              self._map)
                 self._pose_array = self._update_pose_array(self._particles)
                 self._publish_pose_array()
-
-        # rate.sleep() run loop at exact time in Hz
-        elapsed_time = time.time() - start_time
-        rospy.loginfo("Loop time:" + str(elapsed_time))
+                # rate.sleep() run loop at exact time in Hz
+                elapsed_time = time.time() - start_time
+                rospy.loginfo("Loop time:" + str(elapsed_time))
 
     def _update_particle_list(self, old_particles, odometry, laser_points, map):
         """
@@ -272,6 +272,7 @@ class MonteCarlo:
         euler = tf.transformations.euler_from_quaternion([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
         self._odometry = (x, y, euler[2])
 
+        self._new_odometry = True
 
         # rospy.loginfo(self._odometry)
 
@@ -298,6 +299,9 @@ class MonteCarlo:
         :param pose: ros massage
         """
         self._laser_point_list = laserscan.ranges
+
+        self._new_laser_data = True
+
         # rospy.loginfo(rospy.get_caller_id() + "I heard %s", laserscan)
         # rospy.loginfo("%s", self._laser_point_list)
         # rospy.loginfo("%s", len(self._laser_point_list))
