@@ -174,7 +174,7 @@ class MonteCarlo:
 
     def _initialize_particles(self):
         """
-
+        Method that initialize the particles according to map
         :param:
         :return:
         """
@@ -247,6 +247,11 @@ class MonteCarlo:
         self.publisher.publish(self._pose_array)
 
     def _create_pose(self, particle):
+        """
+        Retrives a particle and transforms to Pose object. Used to publish particles to rviz through /PoseArray topic
+        :param particle: particle tuppel =(x, y, theta)
+        :return pose: Pose object
+        """
         pose = Pose()
         # Add x,y,z position to pose
         pose.position.x = particle[0]
