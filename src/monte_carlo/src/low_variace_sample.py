@@ -1,6 +1,5 @@
 import random
 
-
 #def low_var_sample(X_bar,W):
 X_bar = [1, 0.7, 3, 4]
 W = [0.1, 0.2, 0.1, 0.9]
