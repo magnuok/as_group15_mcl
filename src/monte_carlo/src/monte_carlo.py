@@ -18,11 +18,10 @@ class MonteCarlo:
 
     _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scans
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
-    _map = []   # Contains list of cells in map
-    _particles = []   # List with particle tuples = (x, y, theta)
+    _map = []  # Contains list of cells in map
+    _particles = []  # List with particle tuples = (x, y, theta)
     _pose_array = PoseArray()
-    _occupancy_grid_msg = OccupancyGrid() #TEST
-
+    _occupancy_grid_msg = OccupancyGrid()  # TEST
 
     def callback_odometry(self, odom_msg):
         """
@@ -35,9 +34,9 @@ class MonteCarlo:
         quaternion = odom_msg.pose.pose.orientation
         euler = tf.transformations.euler_from_quaternion([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
         self._odometry = (x, y, euler[2])
-        #rospy.loginfo(self._odometry)
+        # rospy.loginfo(self._odometry)
 
-        #self._odometry = pose
+        # self._odometry = pose
 
         # rospy.loginfo("Received Odom pose:")
         # rospy.loginfo("Timestamp" + str(self._odometry.header.stamp))
@@ -51,9 +50,8 @@ class MonteCarlo:
         #
         # # Also print Roll, Pitch, Yaw
         # euler = tf.transformations.euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
-        #rospy.loginfo("Euler Angles: %s" % str(euler))
+        # rospy.loginfo("Euler Angles: %s" % str(euler))
         # rospy.loginfo("")
-
 
     def callback_laser(self, laserscan):
         """
@@ -61,46 +59,38 @@ class MonteCarlo:
         :param pose: ros massage
         """
         self._laser_point_list = laserscan.ranges
-        #rospy.loginfo(rospy.get_caller_id() + "I heard %s", laserscan)
-        #rospy.loginfo("%s", self._laser_point_list)
-        #rospy.loginfo("%s", len(self._laser_point_list))
+        # rospy.loginfo(rospy.get_caller_id() + "I heard %s", laserscan)
+        # rospy.loginfo("%s", self._laser_point_list)
+        # rospy.loginfo("%s", len(self._laser_point_list))
 
-
-    def _calculate_new_particle_list(self, particles, odometry, laser_points, map):
+    def _calculate_new_particle_list(self, old_particles, odometry, laser_points, map):
         """
         calculates new particles based on Monte Carlo Localization.
-        :param particles: The old list of particles
+        :param old_particles: The old list of particles
         :param odometry: The odometry since the last calculation
         :param laser_points: List of all the laser_points
         :param map: the map we want to localize the robot in.
         :return: the new list of particles.
         """
-        pass
+        # the new particles
+        particle_list = []
 
-    # def mcl(X_previous, u, z, map):
-    #
-    #     X = []
-    #
-    #     X_bar = []
-    #     W = []
-    #     # X_bar = {}
-    #     M = 100
-    #
-    #     for m in range(0, len(X_previous)):
-    #         x = sample_motion_model(u, X_previous[m])
-    #         w = measurement_model(z, x, map)
-    #         X_bar.append(x)
-    #         W.append(w)
-    #         # X_bar[x] = w
-    #
-    #     # Before resampling:
-    #     # Check the number of effective particles
-    #     n_eff = 1. / sum([w * w for w in W])
-    #     if n_eff < M / 2 and set(X) != set(X_previous):
-    #         X = low_variance_sample(X_bar, W)
-    #     else:
-    #         X = X_previous
-    #     return X
+        # the old_particles after applying the motion_model to them
+        pose_list = []
+
+        # the weights of the old_particles after applying the motion_model to them
+        weight_list = []
+
+        # for each particle in old_particle
+        for particle in old_particles:
+            # get new poses after applying the motion_model
+            pose_list.append(type(self).sample_motion_model_odometry(odometry, particle))
+
+            # get weights corresponding to the new pose_list
+            weight_list.append(type(self).measurement_model(laser_points, pose_list, map))
+
+        # return the new set of particles
+        self._async_callback(particle_list)
 
     def _sample_motion_model(self, ):
         pass
@@ -113,7 +103,7 @@ class MonteCarlo:
         """
         self._map = occupancy_grid_msg.data  # Total map
 
-        rospy.loginfo("MAP: " +str(self._map))
+        rospy.loginfo("MAP: " + str(self._map))
         self._occupancy_grid_msg = occupancy_grid_msg
 
     def initialize_particles(self):
@@ -127,7 +117,6 @@ class MonteCarlo:
         resolution = self._occupancy_grid_msg.info.resolution
         width = self._occupancy_grid_msg.info.width
 
-
         # rospy.loginfo("Height [m]:" + str(height))
         # rospy.loginfo("Width [m]:" + str(width))
         # #Origin:
@@ -140,7 +129,7 @@ class MonteCarlo:
 
         # The cell arrays:
 
-        #rospy.loginfo("_map" + str(self._map))
+        # rospy.loginfo("_map" + str(self._map))
         free_space_list = []  # Only free space
         initial_particle_placement = []  # list with initial cells
 
@@ -148,7 +137,7 @@ class MonteCarlo:
         for i in range(0, len(self._map)):
             if self._map[i] != 100 and self._map[i] != -1:
                 free_space_list.append(i)
-        rospy.loginfo("Free space list: " +str(free_space_list))
+        rospy.loginfo("Free space list: " + str(free_space_list))
 
         # pick random free cells
         number_of_particles = 100
@@ -215,11 +204,7 @@ if __name__ == '__main__':
         pass
     mcl.initialize_particles()
 
-
-    #rospy.Subscriber("/RosAria/pose", Odometry, mcl.callback_odometry)
-    #rospy.Subscriber("/scan", LaserScan, mcl.callback_laser)
-    #mcl.publish_pose_array()
+    # rospy.Subscriber("/RosAria/pose", Odometry, mcl.callback_odometry)
+    # rospy.Subscriber("/scan", LaserScan, mcl.callback_laser)
+    # mcl.publish_pose_array()
     rospy.spin()
-
-
-
