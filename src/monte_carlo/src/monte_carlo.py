@@ -19,7 +19,7 @@ class MonteCarlo:
     """
 
     # TODO: maybe remove these, put them in __init__
-    _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scans
+    _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scanss
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
     _map = []  # Contains list of cells in map
     _particles = []  # List with particle tuples = (x, y, theta)
@@ -30,14 +30,15 @@ class MonteCarlo:
     _new_odometry = False
     _new_laser_data = False
 
-    def __init__(self):
+    def __init__(self, testing = False):
         # Initialize mcl node
         rospy.init_node('monte_carlo', anonymous=True)
 
-        # initializes particles and publisher
-        self._initialize_particles()
-        self._initialize_publisher()
-        self._initialize_subscribers()
+        if not testing:
+            # initializes particles and publisher
+            self._initialize_particles()
+            self._initialize_publisher()
+            self._initialize_subscribers()
 
         # Set frame_id in pose_array to be recognized in rviz
         self._pose_array.header.frame_id = "map"
@@ -116,6 +117,7 @@ class MonteCarlo:
         delta_trans = math.sqrt(odometry[0] ^ 2 + odometry[1] ^ 2)
         delta_rot_2 = odometry[2] - delta_rot_1
 
+
         delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
         delta_trans_hat = delta_trans - cls.sample(abs(ALFA_3 * delta_trans + ALFA_4 * (delta_rot_1 + delta_rot_2)))
         delta_rot_2_hat = delta_rot_2 - cls.sample(abs(ALFA_1 * delta_rot_2 + ALFA_2 * delta_trans))
@@ -144,6 +146,8 @@ class MonteCarlo:
         :return: A number chosen randomly from the normal distribution with center in 0 and standard deviation =
         standard_deviation
         """
+        if standard_deviation == 0:
+            return 0
         return numpy.random.normal(loc=0, scale=standard_deviation, size=None)
 
     @staticmethod
