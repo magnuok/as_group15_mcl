@@ -11,7 +11,7 @@ import random
 import math
 import numpy
 import time
-import scipy.integrate # joakim
+import scipy.integrate
 
 
 class MonteCarlo:
@@ -34,14 +34,19 @@ class MonteCarlo:
     def __init__(self):
         # Initialize mcl node
         rospy.init_node('monte_carlo', anonymous=True)
-
         # initializes particles and publisher
-        self._initialize_particles()
-        self._initialize_publisher()
         self._initialize_subscribers()
+        self._initialize_publisher()
+        self._initialize_particles()
 
         # Set frame_id in pose_array to be recognized in rviz
         self._pose_array.header.frame_id = "map"
+
+        # Update pose_array
+        self._update_pose_array(self._particles)
+        # Publish the initial Particles
+        self._publish_pose_array(self._pose_array)
+
 
     def loop(self):
         # rate = rospy.Rate(1) #Every 1/frequency seconds. Input freq
@@ -160,7 +165,8 @@ class MonteCarlo:
         for k in K:
             z_t = laser_points[k]  # measurement k
             theta_k = theta_k + delta_theta  # need the relative direction of the measurement z_t
-            z_t_star = self.ray_casting(predicted_particle, theta_k, map, zmax)   # Real value for measurement k using ray casting
+            z_t_star = self.ray_casting(predicted_particle, theta_k, map,
+                                        zmax)  # Real value for measurement k using ray casting
 
             if z_t == z_max:
                 p_hit = 0
@@ -199,7 +205,8 @@ class MonteCarlo:
         """
         x_0 = predicted_particle[0]
         y_0 = predicted_particle[1]
-        theta = predicted_particle[2] + theta_k  # Need to know the angel of both robot and measurement to know in which direction to ray cast.
+        theta = predicted_particle[
+                    2] + theta_k  # Need to know the angel of both robot and measurement to know in which direction to ray cast.
         distance = zmax  # initialize shortest distance to occupied grid as maximal value
         m_size = len(map)  # map size
         max_map_value = zmax  # the maximum value in the map given the particle
@@ -237,7 +244,7 @@ class MonteCarlo:
             y_1 = grid[1]
             # occupancy value in map of the given grid
             occupancy_val = self.get_grid_position(x_1, y_1, map)
-            if map_occupancy_val < occupancy_val: #TODO krokodille
+            if map_occupancy_val < occupancy_val:  # TODO krokodille
                 distance = numpy.sqrt((x_1 - x_0) ** 2 + (y_1 - y_0) ** 2)
                 break
         # return distance in meter
@@ -245,11 +252,21 @@ class MonteCarlo:
 
     @staticmethod
     def get_grid_position(self, row, column, map):
-        #TODO: check that this is right with col and row
+        # TODO: check that this is right with col and row
         width = self._occupancy_grid_msg.info.width
-        return map[row*width + column]
+        return map[row * width + column]
 
-    def bresenham(self, x_0, y_0, x_end, y_end):
+    @staticmethod
+    def sample(standard_deviation):
+        """
+        :param standard_deviation: standard deviation.
+        :return: A number chosen randomly from the normal distribution with center in 0 and standard deviation =
+        standard_deviation
+        """
+        return numpy.random.normal(loc=0, scale=standard_deviation, size=None)
+
+    @staticmethod
+    def bresenham(x_0, y_0, x_end, y_end):
         """
         Sub function of ray_casting used for calculations of true value of z_t
         :param y_0:
@@ -314,32 +331,24 @@ class MonteCarlo:
         return grids
 
     @staticmethod
-    def sample(standard_deviation):
+    def low_variance_sampler(predicted_particles, weights):
         """
-        :param standard_deviation: standard deviation.
-        :return: A number chosen randomly from the normal distribution with center in 0 and standard deviation =
-        standard_deviation
-        """
-        return numpy.random.normal(loc=0, scale=standard_deviation, size=None)
-
-    @staticmethod
-    def low_variance_sampler(particles, weights):
-        """
-        :param particles:
+        :param predicted_particles:
         :param weights:
         :return:
         """
+        # TODO: maybe implement exception
         new_particle_list = []
-        r = random.random() * (1. / (len(particles)))
+        r = random.random() * (1. / (len(predicted_particles)))
         c = weights[0]
         i = 0
 
-        for m in range(1, len(particles) + 1):
-            u = r + (m - 1) * (1. / (len(particles)))
+        for m in range(1, len(predicted_particles) + 1):
+            u = r + (m - 1) * (1. / (len(predicted_particles)))
             while u > c:
                 i += 1
                 c += weights[i]
-            new_particle_list.append(particles[i])
+            new_particle_list.append(predicted_particles[i])
         return new_particle_list
 
     def _update_pose_array(self, _particles):
@@ -359,19 +368,7 @@ class MonteCarlo:
         resolution = self._occupancy_grid_msg.info.resolution
         width = self._occupancy_grid_msg.info.width
 
-        # rospy.loginfo("Height [m]:" + str(height))
-        # rospy.loginfo("Width [m]:" + str(width))
-        # #Origin:
-        # x_origin = occupancy_grid_msg.info.origin.position.x
-        # y_origin = occupancy_grid_msg.info.origin.position.y
-        # z_origin = occupancy_grid_msg.info.origin.position.z
-        # rospy.loginfo("x_origin:" + str(x_origin))
-        # rospy.loginfo("y_origin:" + str(y_origin))
-        # rospy.loginfo("z_origin:" + str(z_origin))
-
         # The cell arrays:
-
-        # rospy.loginfo("_map" + str(self._map))
         free_space_list = []  # Only free space
         initial_particle_placement = []  # list with initial cells
 
@@ -379,7 +376,6 @@ class MonteCarlo:
         for i in range(0, len(self._map)):
             if self._map[i] != 100 and self._map[i] != -1:
                 free_space_list.append(i)
-        rospy.loginfo("Free space list: " + str(free_space_list))
 
         # pick random free cells
         number_of_particles = 100
@@ -410,17 +406,18 @@ class MonteCarlo:
         self.publisher = rospy.Publisher('/PoseArray', PoseArray, queue_size=10)
 
     def _initialize_subscribers(self):
-        rospy.Subscriber("/map", OccupancyGrid, mcl.callback_map)
-        rospy.Subscriber("/RosAria/pose", Odometry, mcl.callback_odometry)
-        rospy.Subscriber("/scan", LaserScan, mcl.callback_laser)
+        rospy.Subscriber("/map", OccupancyGrid, self.callback_map)
+        rospy.Subscriber("/RosAria/pose", Odometry, self.callback_odometry)
+        rospy.Subscriber("/scan", LaserScan, self.callback_laser)
 
-    def _publish_pose_array(self):
+
+    def _publish_pose_array(self, _pose_array):
         """
         :return:
         """
 
         # publishes the particles
-        self.publisher.publish(self._pose_array)
+        self.publisher.publish(_pose_array)
 
     def _create_pose(self, particle):
         """
@@ -453,39 +450,12 @@ class MonteCarlo:
         euler = tf.transformations.euler_from_quaternion([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
         self._odometry = (x, y, euler[2])
 
-        self._new_odometry = True
-
-        # rospy.loginfo(self._odometry)
-
-        # self._odometry = pose
-
-        # rospy.loginfo("Received Odom pose:")
-        # rospy.loginfo("Timestamp" + str(self._odometry.header.stamp))
-        # rospy.loginfo("frame_id:" + str(self._odometry.header.frame_id))
-        #
-        # # Copying for simplicity
-        # position = self._odometry.pose.pose.position
-        # quat = self._odometry.pose.pose.orientation
-        # rospy.loginfo("Point Position: [ %f, %f, %f ]" % (position.x, position.y, position.z))
-        # rospy.loginfo("Quat Orientation: [ %f, %f, %f, %f]" % (quat.x, quat.y, quat.z, quat.w))
-        #
-        # # Also print Roll, Pitch, Yaw
-        # euler = tf.transformations.euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
-        # rospy.loginfo("Euler Angles: %s" % str(euler))
-        # rospy.loginfo("")
-
     def callback_laser(self, laserscan):
         """
         callback function used by a ros subscriber. Receives the laser and saves it to a list.
         :param pose: ros massage
         """
         self._laser_point_list = laserscan.ranges
-
-        self._new_laser_data = True
-
-        # rospy.loginfo(rospy.get_caller_id() + "I heard %s", laserscan)
-        # rospy.loginfo("%s", self._laser_point_list)
-        # rospy.loginfo("%s", len(self._laser_point_list))
 
     def callback_map(self, occupancy_grid_msg):
         """
@@ -494,19 +464,10 @@ class MonteCarlo:
         :return:
         """
         self._map = occupancy_grid_msg.data  # Total map
-
-        # rospy.loginfo("MAP: " + str(self._map))
         self._occupancy_grid_msg = occupancy_grid_msg
 
 
 if __name__ == '__main__':
     mcl = MonteCarlo()
-
-    # Initialize Monte Carlo node
-    rospy.init_node('monte_carlo', anonymous=True)
-    rospy.Subscriber("/map", OccupancyGrid, mcl.callback_map)
-    while len(mcl._map) == 0:
-        pass
-    mcl.initialize_particles()
-
+    #mcl.loop()
     rospy.spin()
