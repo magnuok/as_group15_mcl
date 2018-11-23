@@ -37,9 +37,9 @@ class MonteCarlo:
 
         if not testing:
             # initializes particles and publisher
-            self._initialize_particles()
             self._initialize_publisher()
             self._initialize_subscribers()
+            self._initialize_particles()
 
         # Set frame_id in pose_array to be recognized in rviz
         self._pose_array.header.frame_id = "map"
@@ -57,8 +57,10 @@ class MonteCarlo:
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
             if self._new_odometry and self._new_laser_data:
+                # Set flags to false
                 self._new_laser_data = False
                 self._new_odometry = False
+
                 self._particles = self._update_particle_list(self._particles, self._odometry, self._laser_point_list,
                                                              self._map)
                 self._pose_array = self._update_pose_array(self._particles)
@@ -78,9 +80,9 @@ class MonteCarlo:
         """
         # the new particles
         particle_list = []
-        # the old_particles after applying the motion_model to them
+        # the old_particles after applying the motion_model
         predicted_particles_list = []
-        # the weights of the old_particles after applying the motion_model to them
+        # the weights of the old_particles after applying the motion_model
         weight_list = []
 
         # motion and measurement model
@@ -411,9 +413,12 @@ class MonteCarlo:
 
     def _initialize_subscribers(self):
         rospy.Subscriber("/map", OccupancyGrid, self.callback_map)
+        # Wait for map to get loaded into self._map
+        while len(self._map) == 0:
+            pass
+
         rospy.Subscriber("/RosAria/pose", Odometry, self.callback_odometry)
         rospy.Subscriber("/scan", LaserScan, self.callback_laser)
-
 
     def _publish_pose_array(self, _pose_array):
         """
