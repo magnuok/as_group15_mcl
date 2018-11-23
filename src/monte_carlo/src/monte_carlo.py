@@ -40,16 +40,10 @@ class MonteCarlo:
             self._initialize_subscribers()
             self._initialize_particles()
 
-            # Set frame_id in pose_array to be recognized in rviz
-            self._pose_array.header.frame_id = "map"
-
             # Update pose_array
             self._update_pose_array(self._particles)
             # Publish the initial Particles
             self._publish_pose_array(self._pose_array)
-
-        with open('map.txt', 'w') as f:
-            f.write(self._map)
 
 
     def loop(self):
@@ -359,11 +353,10 @@ class MonteCarlo:
             new_particle_list.append(predicted_particles[i])
         return new_particle_list
 
-    def _update_pose_array(self, _particles):
-        for particle in self._particles:
+    def _update_pose_array(self, particles):
+        for particle in particles:
             pose = self._create_pose(particle)
             self._pose_array.poses.append(pose)  # Add to pose_array
-        pass
 
     def _initialize_particles(self):
         """
@@ -412,6 +405,8 @@ class MonteCarlo:
     def _initialize_publisher(self):
         # initialize the publisher object
         self.publisher = rospy.Publisher('/PoseArray', PoseArray, queue_size=10)
+        # Set frame_id in pose_array to be recognized in rviz
+        self._pose_array.header.frame_id = "map"
 
     def _initialize_subscribers(self):
         rospy.Subscriber("/map", OccupancyGrid, self.callback_map)
@@ -426,7 +421,6 @@ class MonteCarlo:
         """
         :return:
         """
-
         # publishes the particles
         self.publisher.publish(_pose_array)
 
