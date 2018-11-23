@@ -34,20 +34,22 @@ class MonteCarlo:
     def __init__(self, testing = False):
         # Initialize mcl node
         rospy.init_node('monte_carlo', anonymous=True)
-
         if not testing:
             # initializes particles and publisher
             self._initialize_particles()
             self._initialize_publisher()
             self._initialize_subscribers()
 
-        # Set frame_id in pose_array to be recognized in rviz
-        self._pose_array.header.frame_id = "map"
+            # Set frame_id in pose_array to be recognized in rviz
+            self._pose_array.header.frame_id = "map"
 
-        # Update pose_array
-        self._update_pose_array(self._particles)
-        # Publish the initial Particles
-        self._publish_pose_array(self._pose_array)
+            # Update pose_array
+            self._update_pose_array(self._particles)
+            # Publish the initial Particles
+            self._publish_pose_array(self._pose_array)
+
+        with open('map.txt', 'w') as f:
+            f.write(self._map)
 
 
     def loop(self):
