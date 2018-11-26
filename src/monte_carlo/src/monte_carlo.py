@@ -62,8 +62,7 @@ class MonteCarlo:
                 self._new_laser_data = False
                 self._new_odometry = False
 
-                odometry = tuple(numpy.subtract(self._odometry, self._old_odometry))
-                self._particles = self._update_particle_list(self._particles, odometry, self._laser_point_list,
+                self._particles = self._update_particle_list(self._particles, self._new_odometry, self._old_odometry, self._laser_point_list,
                                                              self._map)
                 self._old_odometry = self._odometry  # set old odom to this odom
                 self._pose_array = self._update_pose_array(self._particles)
@@ -72,7 +71,7 @@ class MonteCarlo:
                 elapsed_time = time.time() - start_time
                 #rospy.loginfo("Loop time:" + str(elapsed_time))
 
-    def _update_particle_list(self, old_particles, odometry, laser_points, map):
+    def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
         calculates new particles based on Monte Carlo Localization.
         :param old_particles: The old list of particles
@@ -92,7 +91,7 @@ class MonteCarlo:
         for particle in old_particles:
             # get new poses after applying the motion_model
             # TEST
-            predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, particle)
+            predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
             # end TEST
             # get weights corresponding to the new pose_list
@@ -115,7 +114,7 @@ class MonteCarlo:
         return particle_list
 
     @classmethod
-    def sample_motion_model_odometry(cls, odometry, x_last):
+    def sample_motion_model_odometry(cls, odometry, old_odometry, x_last):
         """
         Not sure if it's correct to specify this as a classmethod. Same goes for staticmethod underneath.
 
@@ -141,9 +140,9 @@ class MonteCarlo:
         ALFA_3 = 0.001;
         ALFA_4 = 0.001;
 
-        delta_rot_1 = numpy.arctan2(odometry[1], odometry[0])
+        delta_rot_1 = numpy.arctan2(odometry[1], odometry[0]) - old_odometry[2]
         delta_trans = math.sqrt(pow(odometry[0], 2) + pow(odometry[1], 2))
-        delta_rot_2 = odometry[2] - delta_rot_1
+        delta_rot_2 = odometry[2] - old_odometry[2] - delta_rot_1
 
         delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
         delta_trans_hat = delta_trans - cls.sample(abs(ALFA_3 * delta_trans + ALFA_4 * (delta_rot_1 + delta_rot_2)))
