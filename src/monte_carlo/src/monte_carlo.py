@@ -140,8 +140,8 @@ class MonteCarlo:
         ALFA_3 = 0.001;
         ALFA_4 = 0.001;
 
-        delta_rot_1 = numpy.arctan2(odometry[1], odometry[0]) - old_odometry[2]
-        delta_trans = math.sqrt(pow(odometry[0], 2) + pow(odometry[1], 2))
+        delta_rot_1 = numpy.arctan2(odometry[1]-old_odometry[1], odometry[0]-old_odometry[0]) - old_odometry[2]
+        delta_trans = math.sqrt(pow(odometry[0]-old_odometry[0], 2) + pow(odometry[1]-old_odometry[1], 2))
         delta_rot_2 = odometry[2] - old_odometry[2] - delta_rot_1
 
         delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
