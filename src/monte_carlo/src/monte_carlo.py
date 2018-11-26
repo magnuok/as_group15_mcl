@@ -22,7 +22,7 @@ class MonteCarlo:
     # TODO: maybe remove these, put them in __init__
     _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scanss
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
-    _old_odometry = (0, 0, 0) # contains the odometry used in last iteration of __update_particle_list
+    _old_odometry = () # contains the odometry used in last iteration of __update_particle_list
     _map = []  # Contains list of cells in map
     _particles = []  # List with particle tuples = (x, y, theta)
     _pose_array = PoseArray()
@@ -31,8 +31,8 @@ class MonteCarlo:
 
     _number_of_particles = 1
 
-    _new_odometry = False
-    _new_laser_data = False
+    _is_new_odometry = False
+    _is_new_laser_data = False
     _first_odom = True
 
     def __init__(self, testing = False):
@@ -57,12 +57,12 @@ class MonteCarlo:
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
 
-            if self._new_odometry and self._new_laser_data:
+            if self._is_new_odometry and self._is_new_laser_data:
                 # Set flags to false
-                self._new_laser_data = False
-                self._new_odometry = False
+                self._is_new_laser_data = False
+                self._is_new_odometry = False
 
-                self._particles = self._update_particle_list(self._particles, self._new_odometry, self._old_odometry, self._laser_point_list,
+                self._particles = self._update_particle_list(self._particles, self._odometry, self._old_odometry, self._laser_point_list,
                                                              self._map)
                 self._old_odometry = self._odometry  # set old odom to this odom
                 self._pose_array = self._update_pose_array(self._particles)
@@ -545,7 +545,7 @@ class MonteCarlo:
             self._first_odom = False
 
         self._odometry = (x, y, euler[2])
-        self._new_odometry = True
+        self._is_new_odometry = True
 
     def callback_laser(self, laserscan):
         """
@@ -554,7 +554,7 @@ class MonteCarlo:
         """
         self._laser_point_list = laserscan.ranges
 
-        self._new_laser_data = True
+        self._is_new_laser_data = True
 
     def callback_map(self, occupancy_grid_msg):
         """
