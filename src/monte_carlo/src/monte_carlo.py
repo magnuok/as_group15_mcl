@@ -152,8 +152,11 @@ class MonteCarlo:
 
         return x, y, theta
 
+    #TEST
     test = 1
     test2 = True
+    test3 = True
+    #end TEST
 
     def measurement_model(self, laser_points, predicted_particle, map):
         """
@@ -212,10 +215,10 @@ class MonteCarlo:
 
                 p_hit = eta * self.gaussian(laser_point, sigma, z_t_star)
 
-                # TEST
-                if (self.test < 10):
+                # TEST to check the last 12 measurements
+                if (k>500 and self.test3):
                     rospy.loginfo("p_hit: " + str(p_hit))
-                    rospy.loginfo("predicted particle: " + str(predicted_particle[0]))
+                    rospy.loginfo("particle angle: " + str(predicted_particle[2]))
                     rospy.loginfo("laster_point: " + str(laser_point))
                     rospy.loginfo("z_t_star: " + str(z_t_star))
                     rospy.loginfo("eta: " + str(eta))
@@ -223,6 +226,8 @@ class MonteCarlo:
                     rospy.loginfo("Weight: " + str(weight))
                     rospy.loginfo("\n")
                     self.test = self.test + 1
+                    if k == 511:
+                        self.test3 = False
                 #TEST end
 
                 p_max = 0
@@ -233,12 +238,13 @@ class MonteCarlo:
             # the relative direction of the measurement z_t, updated for each iteration
             theta_k = theta_k + delta_theta
 
+        if numpy.isnan(weight):
+            weight = 0
+
         if self.test2 == True:
-            rospy.loginfo("Total weight = " + str(numpy.isnan(weight)))
+            rospy.loginfo("Total weight = " + str(weight))
             self.test2 = False
 
-        if numpy.isnan(weight):
-             weight = 0
 
         return weight
 
@@ -312,8 +318,9 @@ class MonteCarlo:
             x_1 = grid[0]
             y_1 = grid[1]
             # occupancy value in map of the given grid
+            #TODO: change if-sentence when map is 100% (remove "or")
             occupancy_val = self.get_occupancy_value(x_1, y_1, map)
-            if map_occupancy_val < occupancy_val:
+            if map_occupancy_val < occupancy_val or occupancy_val == -1:
                 distance = numpy.sqrt((x_1 - x_0) ** 2 + (y_1 - y_0) ** 2)
                 break
         # return distance in meter
@@ -479,7 +486,9 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+
+            self._particles.append((15, 20.5, numpy.pi / 6.5))
+            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
