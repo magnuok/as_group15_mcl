@@ -22,6 +22,7 @@ class MonteCarlo:
     # TODO: maybe remove these, put them in __init__
     _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scanss
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
+    _old_odometry = (0, 0, 0) # contains the odometry used in last iteration of __update_particle_list
     _map = []  # Contains list of cells in map
     _particles = []  # List with particle tuples = (x, y, theta)
     _pose_array = PoseArray()
@@ -30,6 +31,7 @@ class MonteCarlo:
 
     _new_odometry = False
     _new_laser_data = False
+    _first_odom = True
 
     def __init__(self, testing = False):
         # Initialize mcl node
@@ -52,18 +54,21 @@ class MonteCarlo:
         # While not mcl is terminated by user
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
+
             if self._new_odometry and self._new_laser_data:
                 # Set flags to false
                 self._new_laser_data = False
                 self._new_odometry = False
 
-                self._particles = self._update_particle_list(self._particles, self._odometry, self._laser_point_list,
+                odometry = tuple(numpy.subtract(self._odometry, self._old_odometry))
+                self._particles = self._update_particle_list(self._particles, odometry, self._laser_point_list,
                                                              self._map)
+                self._old_odometry = self._odometry  # set old odom to this odom
                 self._pose_array = self._update_pose_array(self._particles)
-                self._publish_pose_array()
+                self._publish_pose_array(self._pose_array)
                 # rate.sleep() run loop at exact time in Hz
                 elapsed_time = time.time() - start_time
-                rospy.loginfo("Loop time:" + str(elapsed_time))
+                #rospy.loginfo("Loop time:" + str(elapsed_time))
 
     def _update_particle_list(self, old_particles, odometry, laser_points, map):
         """
@@ -84,13 +89,25 @@ class MonteCarlo:
         # motion and measurement model
         for particle in old_particles:
             # get new poses after applying the motion_model
-            predicted_particles_list.append(type(self).sample_motion_model_odometry(odometry, particle))
-
+            # TEST
+            predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, particle)
+            predicted_particles_list.append(predicted_particle)
+            # end TEST
             # get weights corresponding to the new pose_list
-            weight_list.append(type(self).measurement_model(laser_points, particle, map))
 
+            # midl
+            predicted_particle = particle
+            # end midl
+
+            weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
+
+        # test
+        particle_list = old_particles
+        # end test
+        rospy.loginfo("Particles:" + str(old_particles))
+        rospy.loginfo("Weights:" + str(weight_list))
         # sample the new particles
-        particle_list = type(self).low_variance_sampler(predicted_particles_list, weight_list)
+        particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
 
         # return the new set of particles
         return particle_list
@@ -113,13 +130,14 @@ class MonteCarlo:
         # TODO: find out what these values should be
         # TODO: maybe move these to the top of the class, or the top of the module
         # constants
-        ALFA_1 = 0.1;
+
+        ALFA_1 = 0.001;
         ALFA_2 = 0.1;
         ALFA_3 = 0.1;
-        ALFA_4 = 0.1;
+        ALFA_4 = 0.001;
 
         delta_rot_1 = numpy.arctan2(odometry[1], odometry[0])
-        delta_trans = math.sqrt(odometry[0] ^ 2 + odometry[1] ^ 2)
+        delta_trans = math.sqrt(pow(odometry[0], 2) + pow(odometry[1], 2))
         delta_rot_2 = odometry[2] - delta_rot_1
 
         delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
@@ -143,50 +161,60 @@ class MonteCarlo:
 
         ### predicted_particle = (x, y, theta)
 
-        sigma = 0.5
-        q = 1
-        K = len(laser_points)  # number of measurements
+        # variance
+        sigma = 0.1
+        # probability
+        weight = 1
+        # number of measurements
+        num_laser_points = len(laser_points)
 
-        zmax = 5.6  # maximum sensor range [m]
-        theta_k = -numpy.pi / 2  # initial value of measurement angle
-        delta_theta = numpy.pi / 512  # degree change for each measurement. 512 points in one scan
+        # maximum sensor range [m]
+        zmax = 5.6
+        # initial value of measurement angle
+        theta_k = -numpy.pi / 2
+        # degree change for each measurement. 512 points in one scan
+        delta_theta = numpy.pi / num_laser_points
 
-        # weights of the elements
-        z_hit = 0.9
-        z_max = 0.1
-        # initial values
-        p_hit = 1
+        # weight of the elements (change value of z_max to > 0 to include it)
+        z_hit = 1
+        z_max = 0
+
+        # initialization of probability
         p_max = 1
 
         # each measurement laser_points[k] is related to degree from -90 to 90 (given 180 degree range)
         # for loop through all the measurements laser_points
         # laser_points [m]
         # Scanning direction: counterclockwise from Top view
-        for k in K:
-            z_t = laser_points[k]  # measurement k
-            theta_k = theta_k + delta_theta  # need the relative direction of the measurement z_t
-            z_t_star = self.ray_casting(predicted_particle, theta_k, map,
-                                        zmax)  # Real value for measurement k using ray casting
+        for k in range(0, num_laser_points):
+            # measurement k
+            laser_point = laser_points[k]
 
-            if z_t == z_max:
+            # the relative direction of the measurement z_t
+            theta_k = theta_k + delta_theta
+
+            # Real value for laser_point using ray casting
+            # (the actual distance to the nearest occupied grid, given predicted_particle and current measurement angle)
+            z_t_star = self.ray_casting(predicted_particle, theta_k, map, zmax)
+
+            if laser_point == z_max:
                 p_hit = 0
                 p_max = 1
-            elif z_t > z_max:
+            elif laser_point > z_max:
                 p_hit = 0
             else:
                 # integrate over z_t, integrate.quad gives two values (the integral sum and the error),
                 # we are only interested in the integral.
                 eta = 1 / (scipy.integrate.quad(self.gaussian, 0, zmax, args=(sigma, z_t_star))[0])
-                p_hit = eta * self.gaussian(sigma, z_t_star, z_t)
+                p_hit = eta * self.gaussian(laser_point, sigma, z_t_star)
                 p_max = 0
 
             p = z_hit * p_hit + z_max * p_max
-            q = p * q
-
-        return q
+            weight = p * weight
+        return weight
 
     @staticmethod
-    def gaussian(sigma, z_t_star, z_t):
+    def gaussian(z_t, sigma, z_t_star):
         """
         Sub function of measurement_model calculating the Gaussian
         :param z_t_star:
@@ -198,63 +226,83 @@ class MonteCarlo:
     def ray_casting(self, predicted_particle, theta_k, map, zmax):
         """
         Sub function of measurement_model using current state (pose of robot) and map to calculate true value of a measurement z_t
-        :param theta_k:
-        :param map:
-        :param zmax:
+        :param theta_k: the direction of the laser point
+        :param map: the map
+        :param zmax: maximum distance of the laser range finder
         :return: true distance in meter to obstacle/occupied grid
         """
-        x_0 = predicted_particle[0]
-        y_0 = predicted_particle[1]
-        theta = predicted_particle[
-                    2] + theta_k  # Need to know the angel of both robot and measurement to know in which direction to ray cast.
-        distance = zmax  # initialize shortest distance to occupied grid as maximal value
-        m_size = len(map)  # map size
-        max_map_value = zmax  # the maximum value in the map given the particle
-        map_occupancy_val = 80  # value to identify occupancy
-        if x_0 < max_map_value / 2 and y_0 < max_map_value / 2:
-            x_max = m_size - x_0
-            y_max = m_size - y_0
-        elif x_0 > max_map_value / 2 and y_0 > max_map_value / 2:
-            x_max = x_0
-            y_max = y_0
-        elif x_0 < max_map_value / 2 and y_0 > max_map_value / 2:
-            x_max = m_size - x_0
-            y_max = y_0
-        else:
-            x_max = x_0
-            y_max = m_size - y_0
+        # grid position in x- and y-direction of the given predicted particle
+        x_0 = int(predicted_particle[0] / self._occupancy_grid_msg.info.resolution)
+        y_0 = int(predicted_particle[1] / self._occupancy_grid_msg.info.resolution)
 
-        max_map_value = numpy.sqrt(y_max ** 2 + x_max ** 2)
+        # Direction to ray cast.
+        theta = predicted_particle[2] + theta_k
+
+        # initialize shortest distance to occupied grid as maximal value
+        distance = zmax / self._occupancy_grid_msg.info.resolution
+
+        # value to identify occupancy
+        map_occupancy_val = 80
+
+        # # map size
+        # m_size = len(map)
+        #
+        # # the maximum value in the map given the particle
+        # max_map_value = zmax
+        #
+        #
+        # if x_0 < max_map_value / 2 and y_0 < max_map_value / 2:
+        #     x_max = m_size - x_0
+        #     y_max = m_size - y_0
+        # elif x_0 > max_map_value / 2 and y_0 > max_map_value / 2:
+        #     x_max = x_0
+        #     y_max = y_0
+        # elif x_0 < max_map_value / 2 and y_0 > max_map_value / 2:
+        #     x_max = m_size - x_0
+        #     y_max = y_0
+        # else:
+        #     x_max = x_0
+        #     y_max = m_size - y_0
+        #
+        # max_map_value = numpy.sqrt(y_max ** 2 + x_max ** 2)
 
         # Uses max_map_value to find end points to use in the bresenham algorithm
         # numpy.cos() and numpy.sin() uses radians.
-        x_end = x_0 + round(max_map_value * numpy.cos(theta))
-        y_end = y_0 + round(max_map_value * numpy.sin(theta))
+        x_end = x_0 + int(distance * numpy.cos(theta))
+        y_end = y_0 + int(distance * numpy.sin(theta))
 
         # Gets grids between start and end points
         grids = self.bresenham(x_0, y_0, x_end, y_end)
 
         # find the maximum x and y value the first occupied grid may have.
 
-        # Start going through the grids provided by Bresenham and when we find a grid with higher occupance probability
+        # Start going through the grids provided by Bresenham and when we find a grid with higher occupancy probability
         # value we calculate and return the distance to this value
         # We assume that Bresnham returns an array of grids where the distance from x_0 and y_0 increases. TEST THIS
         for grid in grids:
             x_1 = grid[0]
             y_1 = grid[1]
             # occupancy value in map of the given grid
-            occupancy_val = self.get_grid_position(x_1, y_1, map)
-            if map_occupancy_val < occupancy_val:  # TODO krokodille
+            occupancy_val = self.get_occupancy_value(x_1, y_1, map)
+            if map_occupancy_val < occupancy_val:
                 distance = numpy.sqrt((x_1 - x_0) ** 2 + (y_1 - y_0) ** 2)
                 break
         # return distance in meter
         return distance * self._occupancy_grid_msg.info.resolution
 
-    @staticmethod
-    def get_grid_position(self, row, column, map):
-        # TODO: check that this is right with col and row
+    def get_occupancy_value(self, x, y, map):
+        """
+        :param row:
+        :param column:
+        :param map:
+        :return: occupancy value given x and y coordinate in the grid
+        """
         width = self._occupancy_grid_msg.info.width
-        return map[row * width + column]
+        height = self._occupancy_grid_msg.info.height
+        if y > height or x > width - 1 or x < 1 or y < 0:
+            return -1
+        else:
+            return map[(y - 1) * width + x-1]
 
     @staticmethod
     def sample(standard_deviation):
@@ -274,7 +322,7 @@ class MonteCarlo:
         :param y_0:
         :param x_end:
         :param y_end:
-        :return:
+        :return: list of all grid cells between (x_0, y_0) and (x_end, y_end)
         """
         # Bresenham returns all the x-y coordinates of grids between (x_0, y_0) and (x_end, y_end)
         # The end points will post likely go outside of our grid map (keep in mind)
@@ -354,9 +402,12 @@ class MonteCarlo:
         return new_particle_list
 
     def _update_pose_array(self, particles):
+        self._pose_array = PoseArray()
+        self._pose_array.header.frame_id = "map"
         for particle in particles:
             pose = self._create_pose(particle)
             self._pose_array.poses.append(pose)  # Add to pose_array
+        return self._pose_array
 
     def _initialize_particles(self):
         """
@@ -379,7 +430,7 @@ class MonteCarlo:
                 free_space_list.append(i)
 
         # pick random free cells
-        number_of_particles = 100
+        number_of_particles = 10
         for i in range(0, number_of_particles):
             initial_particle_placement.append(random.choice(free_space_list))
 
@@ -399,14 +450,14 @@ class MonteCarlo:
             particle_height = col * resolution
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
-            self._particles.append(
-                (particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            # TODO: check if its correct
+            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
         self.publisher = rospy.Publisher('/PoseArray', PoseArray, queue_size=10)
         # Set frame_id in pose_array to be recognized in rviz
-        self._pose_array.header.frame_id = "map"
+        self._pose_array.header.frame_id = "map" # Not be here??
 
     def _initialize_subscribers(self):
         rospy.Subscriber("/map", OccupancyGrid, self.callback_map)
@@ -415,6 +466,9 @@ class MonteCarlo:
             pass
 
         rospy.Subscriber("/RosAria/pose", Odometry, self.callback_odometry)
+
+
+
         rospy.Subscriber("/scan", LaserScan, self.callback_laser)
 
     def _publish_pose_array(self, _pose_array):
@@ -453,7 +507,13 @@ class MonteCarlo:
         # Transform quaternion to euler
         quaternion = odom_msg.pose.pose.orientation
         euler = tf.transformations.euler_from_quaternion([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
+        # If first odom. Set _old_odometry aswell
+        if self._first_odom:
+            self._old_odometry = (x, y, euler[2])
+            self._first_odom = False
+
         self._odometry = (x, y, euler[2])
+        self._new_odometry = True
 
     def callback_laser(self, laserscan):
         """
@@ -476,5 +536,5 @@ class MonteCarlo:
 
 if __name__ == '__main__':
     mcl = MonteCarlo()
-    #mcl.loop()
-    rospy.spin()
+    mcl.loop()
+    #rospy.spin()
