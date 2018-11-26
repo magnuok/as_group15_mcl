@@ -152,7 +152,8 @@ class MonteCarlo:
 
         return x, y, theta
 
-    test = True
+    test = 1
+    test2 = True
 
     def measurement_model(self, laser_points, predicted_particle, map):
         """
@@ -165,8 +166,8 @@ class MonteCarlo:
 
         ### predicted_particle = (x, y, theta)
 
-        # variance
-        sigma = 0.1
+        # standard deviation ( = variance**2 = 0.2 for our SD)
+        sigma = 0.4472135955
         # probability
         weight = 1
         # number of measurements
@@ -194,32 +195,48 @@ class MonteCarlo:
             # measurement k
             laser_point = laser_points[k]
 
-            # the relative direction of the measurement z_t
-            theta_k = theta_k + delta_theta
 
             # Real value for laser_point using ray casting
             # (the actual distance to the nearest occupied grid, given predicted_particle and current measurement angle)
             z_t_star = self.ray_casting(predicted_particle, theta_k, map, zmax)
 
-            if laser_point == z_max:
+            if laser_point == zmax:
                 p_hit = 0
                 p_max = 1
-            elif laser_point > z_max:
+            elif laser_point > zmax:
                 p_hit = 0
             else:
                 # integrate over z_t, integrate.quad gives two values (the integral sum and the error),
                 # we are only interested in the integral.
-                eta = 1 / (scipy.integrate.quad(self.gaussian, 0, zmax, args=(sigma, z_t_star))[0])
+                eta = numpy.divide(1, (scipy.integrate.quad(self.gaussian, 0, zmax, args=(sigma, z_t_star))[0]))
+
                 p_hit = eta * self.gaussian(laser_point, sigma, z_t_star)
+
+                # TEST
+                if (self.test < 10):
+                    rospy.loginfo("p_hit: " + str(p_hit))
+                    rospy.loginfo("predicted particle: " + str(predicted_particle[0]))
+                    rospy.loginfo("laster_point: " + str(laser_point))
+                    rospy.loginfo("z_t_star: " + str(z_t_star))
+                    rospy.loginfo("eta: " + str(eta))
+                    rospy.loginfo("theta_k: " + str(theta_k))
+                    rospy.loginfo("Weight: " + str(weight))
+                    rospy.loginfo("\n")
+                    self.test = self.test + 1
+                #TEST end
+
                 p_max = 0
 
             p = z_hit * p_hit + z_max * p_max
             weight = p * weight
-            #TEST
-            if(self.test == True):
-                rospy.loginfo("p = z_hit * p_hit + z_max * p_max: " + str(p))
 
-        self.test = False
+            # the relative direction of the measurement z_t, updated for each iteration
+            theta_k = theta_k + delta_theta
+
+        if self.test2 == True:
+            rospy.loginfo("Total weight = " + str(weight))
+            self.test2 = False
+
         return weight
 
     @staticmethod
@@ -230,7 +247,7 @@ class MonteCarlo:
         :param z_t:
         :return:
         """
-        return 1 / numpy.sqrt(2 * numpy.pi * sigma ** 2) * numpy.exp(-0.5 * ((z_t_star - z_t) ** 2) / (sigma ** 2))
+        return (1 / numpy.sqrt(2 * numpy.pi * sigma ** 2)) * numpy.exp(-0.5 * ((z_t_star - z_t) ** 2) / (sigma ** 2))
 
     def ray_casting(self, predicted_particle, theta_k, map, zmax):
         """
