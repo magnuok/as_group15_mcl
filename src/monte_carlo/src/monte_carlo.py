@@ -29,6 +29,8 @@ class MonteCarlo:
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
 
+    _number_of_particles = 1
+
     _new_odometry = False
     _new_laser_data = False
     _first_odom = True
@@ -104,10 +106,10 @@ class MonteCarlo:
         # test
         particle_list = old_particles
         # end test
-        rospy.loginfo("Particles:" + str(old_particles))
-        rospy.loginfo("Weights:" + str(weight_list))
+        #rospy.loginfo("Particles:" + str(old_particles))
+        #rospy.loginfo("Weights:" + str(weight_list))
         # sample the new particles
-        particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+        #particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
 
         # return the new set of particles
         return particle_list
@@ -149,6 +151,8 @@ class MonteCarlo:
         theta = x_last[2] + delta_rot_1_hat + delta_rot_2_hat
 
         return x, y, theta
+
+    test = True
 
     def measurement_model(self, laser_points, predicted_particle, map):
         """
@@ -211,6 +215,11 @@ class MonteCarlo:
 
             p = z_hit * p_hit + z_max * p_max
             weight = p * weight
+            #TEST
+            if(self.test == True):
+                rospy.loginfo("p = z_hit * p_hit + z_max * p_max: " + str(p))
+
+        self.test = False
         return weight
 
     @staticmethod
@@ -430,8 +439,7 @@ class MonteCarlo:
                 free_space_list.append(i)
 
         # pick random free cells
-        number_of_particles = 10
-        for i in range(0, number_of_particles):
+        for i in range(0, self._number_of_particles):
             initial_particle_placement.append(random.choice(free_space_list))
 
         # Find the corresponding row and col number of each particle
