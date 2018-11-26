@@ -90,25 +90,17 @@ class MonteCarlo:
         # motion and measurement model
         for particle in old_particles:
             # get new poses after applying the motion_model
-            # TEST
             predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
-            # end TEST
+
             # get weights corresponding to the new pose_list
+            weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
 
-            # midl
-            #predicted_particle = particle
-            # end midl
+        # rospy.loginfo("Particles:" + str(old_particles))
+        # rospy.loginfo("Weights:" + str(weight_list))
 
-            #weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
-
-        # test
-        particle_list = predicted_particles_list
-        # end test
-        ####rospy.loginfo("Particles:" + str(old_particles))
-        #rospy.loginfo("Weights:" + str(weight_list))
         # sample the new particles
-        #particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+        particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
 
         # return the new set of particles
         return particle_list
