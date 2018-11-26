@@ -234,8 +234,11 @@ class MonteCarlo:
             theta_k = theta_k + delta_theta
 
         if self.test2 == True:
-            rospy.loginfo("Total weight = " + str(weight))
+            rospy.loginfo("Total weight = " + str(numpy.isnan(weight)))
             self.test2 = False
+
+        if numpy.isnan(weight):
+             weight = 0
 
         return weight
 
