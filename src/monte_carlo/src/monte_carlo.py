@@ -29,7 +29,7 @@ class MonteCarlo:
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
 
-    _number_of_particles = 1
+    _number_of_particles = 500
 
     _is_new_odometry = False
     _is_new_laser_data = False
@@ -93,14 +93,18 @@ class MonteCarlo:
             predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
 
+            # TEST
             # get weights corresponding to the new pose_list
-            weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
-
+            #weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
+        particle_list = predicted_particles_list
         # rospy.loginfo("Particles:" + str(old_particles))
         # rospy.loginfo("Weights:" + str(weight_list))
 
+        # normalize the weights
+        #weight_list = self._normalize_weights(weight_list)
+
         # sample the new particles
-        particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+        #particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
 
         # return the new set of particles
         return particle_list
@@ -124,7 +128,6 @@ class MonteCarlo:
         # TODO: maybe move these to the top of the class, or the top of the module
         # constants
 
-        rospy.loginfo("x =" + str(odometry[0]) + "    y = " + str(odometry[1]))
 
 
         ALFA_1 = 0.001;
@@ -145,10 +148,25 @@ class MonteCarlo:
         theta = x_last[2] + delta_rot_1_hat + delta_rot_2_hat
 
 
+
         return x, y, theta
 
+    def _normalize_weights(self, weights):
+        """
+        sums all the weights. divides each weight by weightsum.
+        :param weights: a list of all the weights
+        :return: a list of the normalized weights.
+        """
+        sum_weights = numpy.sum(weights)
+        for i in range(0, len(weights)):
+            weights[i] = weights[i]/sum_weights
+
+        return weights
+
+    # testing of measurement model
     test = 1
-    test2 = True
+    test2 = False
+    # testing end
 
     def measurement_model(self, laser_points, predicted_particle, map):
         """
@@ -208,17 +226,17 @@ class MonteCarlo:
                 p_hit = eta * self.gaussian(laser_point, sigma, z_t_star)
 
                 # TEST
-                if (self.test < 10):
-                    rospy.loginfo("p_hit: " + str(p_hit))
-                    rospy.loginfo("predicted particle: " + str(predicted_particle[0]))
-                    rospy.loginfo("laster_point: " + str(laser_point))
-                    rospy.loginfo("z_t_star: " + str(z_t_star))
-                    rospy.loginfo("eta: " + str(eta))
-                    rospy.loginfo("theta_k: " + str(theta_k))
-                    rospy.loginfo("Weight: " + str(weight))
-                    rospy.loginfo("\n")
-                    self.test = self.test + 1
-                #TEST end
+                # if (self.test < 10):
+                #     rospy.loginfo("p_hit: " + str(p_hit))
+                #     rospy.loginfo("predicted particle: " + str(predicted_particle[0]))
+                #     rospy.loginfo("laster_point: " + str(laser_point))
+                #     rospy.loginfo("z_t_star: " + str(z_t_star))
+                #     rospy.loginfo("eta: " + str(eta))
+                #     rospy.loginfo("theta_k: " + str(theta_k))
+                #     rospy.loginfo("Weight: " + str(weight))
+                #     rospy.loginfo("\n")
+                #     self.test = self.test + 1
+                # #TEST end
 
                 p_max = 0
 
@@ -229,7 +247,7 @@ class MonteCarlo:
             theta_k = theta_k + delta_theta
 
         if self.test2 == True:
-            rospy.loginfo("Total weight = " + str(numpy.isnan(weight)))
+            rospy.loginfo("Total weight = " + str(weight))
             self.test2 = False
 
         if numpy.isnan(weight):
@@ -474,8 +492,8 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            self._particles.append((15, 20.5, numpy.pi/6.5))
-            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            #self._particles.append((15, 20.5, numpy.pi/6.5))
+            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
