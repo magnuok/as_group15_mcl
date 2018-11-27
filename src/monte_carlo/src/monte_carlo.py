@@ -95,16 +95,16 @@ class MonteCarlo:
 
             # TEST
             # get weights corresponding to the new pose_list
-            #weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
-        particle_list = predicted_particles_list
+            weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
+        #particle_list = predicted_particles_list
         # rospy.loginfo("Particles:" + str(old_particles))
         # rospy.loginfo("Weights:" + str(weight_list))
 
         # normalize the weights
-        #weight_list = self._normalize_weights(weight_list)
+        weight_list = self._normalize_weights(weight_list)
 
         # sample the new particles
-        #particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+        particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
 
         # return the new set of particles
         return particle_list
@@ -167,7 +167,7 @@ class MonteCarlo:
     test2 = True
     test3 = True
     #end TEST
-    test2 = False
+    test2 = True
     # testing end
 
     def measurement_model(self, laser_points, predicted_particle, map):
@@ -182,7 +182,7 @@ class MonteCarlo:
         ### predicted_particle = (x, y, theta)
 
         # standard deviation ( = variance**2 = 0.2 for our SD)
-        sigma = 0.4472135955
+        sigma = 0.70710678118
         # probability
         # IMPORTANT, weight is set to zero because of logaritmic sum of weights
         weight = 1
@@ -233,28 +233,28 @@ class MonteCarlo:
                 p_max = 0
 
             p =  z_hit * p_hit + z_max * p_max + z_rand * p_rand
-            weight = p * weight
+            weight = p * weight * 1.2
 
             # the relative direction of the measurement z_t, updated for each iteration
             theta_k = theta_k + delta_theta
-
-            # TEST to check the last 12 measurements
-            if self.test3:
-                    rospy.loginfo("" + str(i))
-                    rospy.loginfo("p_hit * z_hit: " + str(p_hit*z_hit))
-                    #rospy.loginfo("p_rand * z_rand: " + str(p_rand*z_rand))
-                    #rospy.loginfo("p_max * z_max: " + str(p_max*z_max))
-                    rospy.loginfo("p: " + str(p))
-                    #rospy.loginfo("particle angle: " + str(predicted_particle[2]))
-                    rospy.loginfo("laster_point: " + str(laser_point))
-                    rospy.loginfo("z_t_star: " + str(z_t_star))
-                    rospy.loginfo("eta: " + str(eta))
-                    #rospy.loginfo("theta_k: " + str(theta_k))
-                    rospy.loginfo("Weight: " + str(weight))
-                    rospy.loginfo("\n")
-                    self.test = self.test + 1
-                    if i == 51:
-                        self.test3 = False
+            #
+            # # TEST to check the last 12 measurements
+            # if self.test3:
+            #         rospy.loginfo("" + str(i))
+            #         rospy.loginfo("p_hit * z_hit: " + str(p_hit*z_hit))
+            #         #rospy.loginfo("p_rand * z_rand: " + str(p_rand*z_rand))
+            #         #rospy.loginfo("p_max * z_max: " + str(p_max*z_max))
+            #         rospy.loginfo("p: " + str(p))
+            #         #rospy.loginfo("particle angle: " + str(predicted_particle[2]))
+            #         rospy.loginfo("laster_point: " + str(laser_point))
+            #         rospy.loginfo("z_t_star: " + str(z_t_star))
+            #         rospy.loginfo("eta: " + str(eta))
+            #         #rospy.loginfo("theta_k: " + str(theta_k))
+            #         rospy.loginfo("Weight: " + str(weight))
+            #         rospy.loginfo("\n")
+              #      self.test = self.test + 1
+                    #if i == 51:
+                    #    self.test3 = False
             #TEST e
 
             i = i + 1
@@ -264,7 +264,9 @@ class MonteCarlo:
 
         if self.test2 == True:
             rospy.loginfo("Total weight = " + str(weight))
-            self.test2 = False
+            rospy.loginfo("Pose: " +  str(predicted_particle))
+
+            #self.test2 = False
 
 
         return weight
