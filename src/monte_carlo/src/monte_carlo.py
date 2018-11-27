@@ -22,7 +22,7 @@ class MonteCarlo:
     # TODO: maybe remove these, put them in __init__
     _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scanss
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
-    _old_odometry = (0, 0, 0) # contains the odometry used in last iteration of __update_particle_list
+    _old_odometry = () # contains the odometry used in last iteration of __update_particle_list
     _map = []  # Contains list of cells in map
     _particles = []  # List with particle tuples = (x, y, theta)
     _pose_array = PoseArray()
@@ -31,8 +31,8 @@ class MonteCarlo:
 
     _number_of_particles = 50
 
-    _new_odometry = False
-    _new_laser_data = False
+    _is_new_odometry = False
+    _is_new_laser_data = False
     _first_odom = True
 
     def __init__(self, testing = False):
@@ -57,13 +57,12 @@ class MonteCarlo:
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
 
-            if self._new_odometry and self._new_laser_data:
+            if self._is_new_odometry and self._is_new_laser_data:
                 # Set flags to false
-                self._new_laser_data = False
-                self._new_odometry = False
+                self._is_new_laser_data = False
+                self._is_new_odometry = False
 
-                odometry = tuple(numpy.subtract(self._odometry, self._old_odometry))
-                self._particles = self._update_particle_list(self._particles, odometry, self._laser_point_list,
+                self._particles = self._update_particle_list(self._particles, self._odometry, self._old_odometry, self._laser_point_list,
                                                              self._map)
                 self._old_odometry = self._odometry  # set old odom to this odom
                 self._pose_array = self._update_pose_array(self._particles)
@@ -72,7 +71,7 @@ class MonteCarlo:
                 elapsed_time = time.time() - start_time
                 #rospy.loginfo("Loop time:" + str(elapsed_time))
 
-    def _update_particle_list(self, old_particles, odometry, laser_points, map):
+    def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
         calculates new particles based on Monte Carlo Localization.
         :param old_particles: The old list of particles
@@ -91,34 +90,27 @@ class MonteCarlo:
         # motion and measurement model
         for particle in old_particles:
             # get new poses after applying the motion_model
-            # TEST
-            predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, particle)
+            predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
-            # end TEST
+
+            # TEST
             # get weights corresponding to the new pose_list
+            #weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
+        particle_list = predicted_particles_list
+        # rospy.loginfo("Particles:" + str(old_particles))
+        # rospy.loginfo("Weights:" + str(weight_list))
 
-            # midl
-            #predicted_particle = particle
-            # end midl
+        # normalize the weights
+        #weight_list = self._normalize_weights(weight_list)
 
-            weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
-
-
-        # test
-       # particle_list = old_particles
-        # end test
-        #rospy.loginfo("Particles:" + str(old_particles))
-        #rospy.loginfo("Weights:" + str(weight_list))
         # sample the new particles
-
-        self._
-        particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+        #particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
 
         # return the new set of particles
         return particle_list
 
     @classmethod
-    def sample_motion_model_odometry(cls, odometry, x_last):
+    def sample_motion_model_odometry(cls, odometry, old_odometry, x_last):
         """
         Not sure if it's correct to specify this as a classmethod. Same goes for staticmethod underneath.
 
@@ -136,14 +128,16 @@ class MonteCarlo:
         # TODO: maybe move these to the top of the class, or the top of the module
         # constants
 
+
+
         ALFA_1 = 0.001;
-        ALFA_2 = 0.1;
-        ALFA_3 = 0.1;
+        ALFA_2 = 0.001;
+        ALFA_3 = 0.001;
         ALFA_4 = 0.001;
 
-        delta_rot_1 = numpy.arctan2(odometry[1], odometry[0])
-        delta_trans = math.sqrt(pow(odometry[0], 2) + pow(odometry[1], 2))
-        delta_rot_2 = odometry[2] - delta_rot_1
+        delta_rot_1 = numpy.arctan2(odometry[1]-old_odometry[1], odometry[0]-old_odometry[0]) - old_odometry[2]
+        delta_trans = math.sqrt(pow(odometry[0]-old_odometry[0], 2) + pow(odometry[1]-old_odometry[1], 2))
+        delta_rot_2 = odometry[2] - old_odometry[2] - delta_rot_1
 
         delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
         delta_trans_hat = delta_trans - cls.sample(abs(ALFA_3 * delta_trans + ALFA_4 * (delta_rot_1 + delta_rot_2)))
@@ -156,10 +150,25 @@ class MonteCarlo:
         return x, y, theta
 
     #TEST
+    def _normalize_weights(self, weights):
+        """
+        sums all the weights. divides each weight by weightsum.
+        :param weights: a list of all the weights
+        :return: a list of the normalized weights.
+        """
+        sum_weights = numpy.sum(weights)
+        for i in range(0, len(weights)):
+            weights[i] = weights[i]/sum_weights
+
+        return weights
+
+    # testing of measurement model
     test = 1
     test2 = True
     test3 = True
     #end TEST
+    test2 = False
+    # testing end
 
     def measurement_model(self, laser_points, predicted_particle, map):
         """
@@ -562,7 +571,7 @@ class MonteCarlo:
             self._first_odom = False
 
         self._odometry = (x, y, euler[2])
-        self._new_odometry = True
+        self._is_new_odometry = True
 
     def callback_laser(self, laserscan):
         """
@@ -571,7 +580,7 @@ class MonteCarlo:
         """
         self._laser_point_list = laserscan.ranges
 
-        self._new_laser_data = True
+        self._is_new_laser_data = True
 
     def callback_map(self, occupancy_grid_msg):
         """
