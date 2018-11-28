@@ -30,6 +30,8 @@ class MonteCarlo:
     publisher = None
 
     _number_of_particles = 500
+    _loop_time = 0.1; # Loop time in seconds
+    _n_eff = 0; # For resampling
 
     _is_new_odometry = False
     _is_new_laser_data = False
@@ -51,7 +53,6 @@ class MonteCarlo:
 
 
     def loop(self):
-        # rate = rospy.Rate(1) #Every 1/frequency seconds. Input freq
 
         # While not mcl is terminated by user
         while not rospy.is_shutdown():
@@ -67,9 +68,16 @@ class MonteCarlo:
                 self._old_odometry = self._odometry  # set old odom to this odom
                 self._pose_array = self._update_pose_array(self._particles)
                 self._publish_pose_array(self._pose_array)
-                # rate.sleep() run loop at exact time in Hz
+
+                # Loop with constant time.
                 elapsed_time = time.time() - start_time
-                #rospy.loginfo("Loop time:" + str(elapsed_time))
+                if elapsed_time > self._loop_time:
+                    rospy.loginfo("EXCEED LOOP TIME:" + str(elapsed_time))
+                    break
+                elif elapsed_time < self._loop_time:
+                    time.sleep(self._loop_time-elapsed_time)
+
+
 
     def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
@@ -95,7 +103,7 @@ class MonteCarlo:
 
             # TEST
             # get weights corresponding to the new pose_list
-            #weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
+            weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
         particle_list = predicted_particles_list
         # rospy.loginfo("Particles:" + str(old_particles))
         # rospy.loginfo("Weights:" + str(weight_list))
@@ -103,8 +111,20 @@ class MonteCarlo:
         # normalize the weights
         #weight_list = self._normalize_weights(weight_list)
 
-        # sample the new particles
-        #particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+
+        # Before resampling: Check the number of effective particles
+        m = self._particles
+        temp = 0
+        for weight in weight_list:
+            temp = temp + weight**2
+        n_eff = 1/temp
+
+        # TODO: This we have to test to see if it resamples enough! Only a tump of rule to use paticles = M/2
+        if n_eff < m/2:
+            # sample the new particles
+            particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+
+
 
         # return the new set of particles
         return particle_list
@@ -247,7 +267,7 @@ class MonteCarlo:
             theta_k = theta_k + delta_theta
 
         if self.test2 == True:
-            rospy.loginfo("Total weight = " + str(weight))
+            #rospy.loginfo("Total weight = " + str(weight))
             self.test2 = False
 
         if numpy.isnan(weight):
