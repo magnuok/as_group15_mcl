@@ -109,7 +109,7 @@ class MonteCarlo:
         # rospy.loginfo("Weights:" + str(weight_list))
 
         # normalize the weights
-        #weight_list = self._normalize_weights(weight_list)
+        weight_list = self._normalize_weights(weight_list)
 
 
         # Before resampling: Check the number of effective particles
@@ -171,6 +171,7 @@ class MonteCarlo:
 
         return x, y, theta
 
+    #TEST
     def _normalize_weights(self, weights):
         """
         sums all the weights. divides each weight by weightsum.
@@ -185,7 +186,10 @@ class MonteCarlo:
 
     # testing of measurement model
     test = 1
-    test2 = False
+    test2 = True
+    test3 = True
+    #end TEST
+    test2 = True
     # testing end
 
     def measurement_model(self, laser_points, predicted_particle, map):
@@ -200,8 +204,9 @@ class MonteCarlo:
         ### predicted_particle = (x, y, theta)
 
         # standard deviation ( = variance**2 = 0.2 for our SD)
-        sigma = 0.4472135955
+        sigma = 0.70710678118
         # probability
+        # IMPORTANT, weight is set to zero because of logaritmic sum of weights
         weight = 1
         # number of measurements
         num_laser_points = len(laser_points)
@@ -211,22 +216,24 @@ class MonteCarlo:
         # initial value of measurement angle
         theta_k = -numpy.pi / 2
         # degree change for each measurement. 512 points in one scan
-        delta_theta = numpy.pi / num_laser_points
+        delta_theta = numpy.pi / 51
 
         # weight of the elements (change value of z_max to > 0 to include it)
         z_hit = 1
-        z_max = 0
+        z_max = 0.0
+        z_rand = 0.0
+        i = 0
 
         # initialization of probability
         p_max = 1
-
+        p_rand = 1
         # each measurement laser_points[k] is related to degree from -90 to 90 (given 180 degree range)
         # for loop through all the measurements laser_points
         # laser_points [m]
         # Scanning direction: counterclockwise from Top view
-        for k in range(0, num_laser_points):
+        for laser_point in laser_points[::10]:
             # measurement k
-            laser_point = laser_points[k]
+            #laser_point = laser_points[k]
 
 
             # Real value for laser_point using ray casting
@@ -244,34 +251,45 @@ class MonteCarlo:
                 eta = numpy.divide(1, (scipy.integrate.quad(self.gaussian, 0, zmax, args=(sigma, z_t_star))[0]))
 
                 p_hit = eta * self.gaussian(laser_point, sigma, z_t_star)
-
-                # TEST
-                # if (self.test < 10):
-                #     rospy.loginfo("p_hit: " + str(p_hit))
-                #     rospy.loginfo("predicted particle: " + str(predicted_particle[0]))
-                #     rospy.loginfo("laster_point: " + str(laser_point))
-                #     rospy.loginfo("z_t_star: " + str(z_t_star))
-                #     rospy.loginfo("eta: " + str(eta))
-                #     rospy.loginfo("theta_k: " + str(theta_k))
-                #     rospy.loginfo("Weight: " + str(weight))
-                #     rospy.loginfo("\n")
-                #     self.test = self.test + 1
-                # #TEST end
-
+                p_rand = 1/zmax
                 p_max = 0
 
-            p = z_hit * p_hit + z_max * p_max
-            weight = p * weight
+            p =  z_hit * p_hit + z_max * p_max + z_rand * p_rand
+            weight = p * weight * 1.2
 
             # the relative direction of the measurement z_t, updated for each iteration
             theta_k = theta_k + delta_theta
+            #
+            # # TEST to check the last 12 measurements
+            # if self.test3:
+            #         rospy.loginfo("" + str(i))
+            #         rospy.loginfo("p_hit * z_hit: " + str(p_hit*z_hit))
+            #         #rospy.loginfo("p_rand * z_rand: " + str(p_rand*z_rand))
+            #         #rospy.loginfo("p_max * z_max: " + str(p_max*z_max))
+            #         rospy.loginfo("p: " + str(p))
+            #         #rospy.loginfo("particle angle: " + str(predicted_particle[2]))
+            #         rospy.loginfo("laster_point: " + str(laser_point))
+            #         rospy.loginfo("z_t_star: " + str(z_t_star))
+            #         rospy.loginfo("eta: " + str(eta))
+            #         #rospy.loginfo("theta_k: " + str(theta_k))
+            #         rospy.loginfo("Weight: " + str(weight))
+            #         rospy.loginfo("\n")
+              #      self.test = self.test + 1
+                    #if i == 51:
+                    #    self.test3 = False
+            #TEST e
 
-        if self.test2 == True:
-            #rospy.loginfo("Total weight = " + str(weight))
-            self.test2 = False
+            i = i + 1
 
         if numpy.isnan(weight):
-             weight = 0
+            weight = 0
+
+        if self.test2 == True:
+            rospy.loginfo("Total weight = " + str(weight))
+            rospy.loginfo("Pose: " +  str(predicted_particle))
+
+            #self.test2 = False
+
 
         return weight
 
@@ -345,8 +363,9 @@ class MonteCarlo:
             x_1 = grid[0]
             y_1 = grid[1]
             # occupancy value in map of the given grid
+            #TODO: change if-sentence when map is 100% (remove "or")
             occupancy_val = self.get_occupancy_value(x_1, y_1, map)
-            if map_occupancy_val < occupancy_val:
+            if map_occupancy_val < occupancy_val or occupancy_val == -1:
                 distance = numpy.sqrt((x_1 - x_0) ** 2 + (y_1 - y_0) ** 2)
                 break
         # return distance in meter
