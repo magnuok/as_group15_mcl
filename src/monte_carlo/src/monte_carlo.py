@@ -29,9 +29,9 @@ class MonteCarlo:
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
 
-    _number_of_particles = 500
-    _loop_time = 0.1; # Loop time in seconds
-    _n_eff = 0; # For resampling
+    _number_of_particles = 100
+    _loop_time = 3 # Loop time in seconds
+    _n_eff = 0 # For resampling
 
     _is_new_odometry = False
     _is_new_laser_data = False
@@ -59,6 +59,7 @@ class MonteCarlo:
             start_time = time.time()  # start time of loop [seconds]
 
             if self._is_new_odometry and self._is_new_laser_data:
+                rospy.loginfo("Starrts")
                 # Set flags to false
                 self._is_new_laser_data = False
                 self._is_new_odometry = False
@@ -71,13 +72,12 @@ class MonteCarlo:
 
                 # Loop with constant time.
                 elapsed_time = time.time() - start_time
+                rospy .loginfo("Loop time = " + str(elapsed_time))
                 if elapsed_time > self._loop_time:
                     rospy.loginfo("EXCEED LOOP TIME:" + str(elapsed_time))
                     break
                 elif elapsed_time < self._loop_time:
                     time.sleep(self._loop_time-elapsed_time)
-
-
 
     def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
@@ -96,10 +96,12 @@ class MonteCarlo:
         weight_list = []
 
         # motion and measurement model
+        rospy.loginfo("Predicts new particle positions")
         for particle in old_particles:
             # get new poses after applying the motion_model
             predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
+
 
             # TEST
             # get weights corresponding to the new pose_list
@@ -108,23 +110,30 @@ class MonteCarlo:
         # rospy.loginfo("Particles:" + str(old_particles))
         # rospy.loginfo("Weights:" + str(weight_list))
 
+
+        if sum(weight_list) == 0:
+            rospy.loginfo("the weights are 0")
+            return particle_list
+
+        rospy.loginfo(weight_list)
+
         # normalize the weights
         weight_list = self._normalize_weights(weight_list)
 
+        rospy.loginfo(weight_list)
 
         # Before resampling: Check the number of effective particles
-        m = self._particles
+        m = self._number_of_particles
         temp = 0
         for weight in weight_list:
-            temp = temp + weight**2
-        n_eff = 1/temp
+           temp = temp + weight**2
 
+        n_eff = 1/temp
         # TODO: This we have to test to see if it resamples enough! Only a tump of rule to use paticles = M/2
         if n_eff < m/2:
             # sample the new particles
+            rospy.loginfo("RESAMPLES")
             particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
-
-
 
         # return the new set of particles
         return particle_list
@@ -150,10 +159,10 @@ class MonteCarlo:
 
 
 
-        ALFA_1 = 0.001;
-        ALFA_2 = 0.001;
-        ALFA_3 = 0.001;
-        ALFA_4 = 0.001;
+        ALFA_1 = 0.5;
+        ALFA_2 = 0.5;
+        ALFA_3 = 0.5;
+        ALFA_4 = 0.5;
 
         delta_rot_1 = numpy.arctan2(odometry[1]-old_odometry[1], odometry[0]-old_odometry[0]) - old_odometry[2]
         delta_trans = math.sqrt(pow(odometry[0]-old_odometry[0], 2) + pow(odometry[1]-old_odometry[1], 2))
@@ -178,7 +187,11 @@ class MonteCarlo:
         :param weights: a list of all the weights
         :return: a list of the normalized weights.
         """
-        sum_weights = numpy.sum(weights)
+        sum_weights = sum(weights)
+        # return so it doesnt divide by 0
+        if sum_weights == 0:
+            return weights
+
         for i in range(0, len(weights)):
             weights[i] = weights[i]/sum_weights
 
@@ -204,7 +217,7 @@ class MonteCarlo:
         ### predicted_particle = (x, y, theta)
 
         # standard deviation ( = variance**2 = 0.2 for our SD)
-        sigma = 0.70710678118
+        sigma = 2
         # probability
         # IMPORTANT, weight is set to zero because of logaritmic sum of weights
         weight = 1
@@ -231,7 +244,7 @@ class MonteCarlo:
         # for loop through all the measurements laser_points
         # laser_points [m]
         # Scanning direction: counterclockwise from Top view
-        for laser_point in laser_points[::10]:
+        for laser_point in laser_points[::50]:
             # measurement k
             #laser_point = laser_points[k]
 
@@ -284,12 +297,11 @@ class MonteCarlo:
         if numpy.isnan(weight):
             weight = 0
 
-        if self.test2 == True:
-            rospy.loginfo("Total weight = " + str(weight))
-            rospy.loginfo("Pose: " +  str(predicted_particle))
+        #if self.test2 == True:
+            #rospy.loginfo("Total weight = " + str(weight))
+            #rospy.loginfo("Pose: " +  str(predicted_particle))
 
             #self.test2 = False
-
 
         return weight
 
@@ -468,9 +480,13 @@ class MonteCarlo:
         :param weights:
         :return:
         """
-        # TODO: maybe implement exception
+        # If sum of weights = 0, return the old particle set.
+        # TODO: This is the case of kidnapping. Should return new random particle set with in some certain area
+        if sum(weights) == 0:
+            return predicted_particles
+
         new_particle_list = []
-        r = random.random() * (1. / (len(predicted_particles)))
+        r = random.random() * (1 / (len(predicted_particles)))
         c = weights[0]
         i = 0
 
