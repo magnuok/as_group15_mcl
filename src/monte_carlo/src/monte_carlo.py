@@ -30,6 +30,8 @@ class MonteCarlo:
     publisher = None
 
     _number_of_particles = 100
+
+    _num_of_measurements = 16 # should be a value of 512 mod(num_measurements) = 0
     _loop_time = 3 # Loop time in seconds
     _n_eff = 0 # For resampling
 
@@ -229,7 +231,7 @@ class MonteCarlo:
         # initial value of measurement angle
         theta_k = -numpy.pi / 2
         # degree change for each measurement. 512 points in one scan
-        delta_theta = numpy.pi / 51
+        delta_theta = numpy.pi / self._num_of_measurements
 
         # weight of the elements (change value of z_max to > 0 to include it)
         z_hit = 1
@@ -244,7 +246,7 @@ class MonteCarlo:
         # for loop through all the measurements laser_points
         # laser_points [m]
         # Scanning direction: counterclockwise from Top view
-        for laser_point in laser_points[::50]:
+        for laser_point in laser_points[::int(num_laser_points/self._num_of_measurements)]:
             # measurement k
             #laser_point = laser_points[k]
 
