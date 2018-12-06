@@ -29,7 +29,7 @@ class MonteCarlo:
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
 
-    _number_of_particles = 1500
+    _number_of_particles = 200
 
     _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
     _loop_time = 3.5 # Loop time in seconds
