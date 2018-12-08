@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import rospy
 import tf
+import sys
 from tf import transformations
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseArray
 from geometry_msgs.msg import Pose
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
 import random
@@ -29,10 +31,15 @@ class MonteCarlo:
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
 
+    #TEST
+    _real_position = ()
+    _position_error = []
+    _theta_error = []
+
     _number_of_particles = 200
 
     _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 3.5 # Loop time in seconds
+    _loop_time = 2 # Loop time in seconds
     _n_eff = 0 # For resampling
 
     _is_new_odometry = False
@@ -55,11 +62,9 @@ class MonteCarlo:
 
 
     def loop(self):
-
         # While not mcl is terminated by user
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
-
             if self._is_new_odometry and self._is_new_laser_data:
                 # rospy.loginfo("Starrts")
                 # Set flags to false
@@ -72,6 +77,12 @@ class MonteCarlo:
                 self._pose_array = self._update_pose_array(self._particles)
                 self._publish_pose_array(self._pose_array)
 
+                # TEST
+                estimated_location = self._calculate_mean_location(self._particles)
+                error = self.error_measurement(self._real_position, estimated_location)
+                self._position_error.append(error[0])
+                self._theta_error.append(error[1])
+
                 # Loop with constant time.
                 elapsed_time = time.time() - start_time
                 # rospy .loginfo("Loop time = " + str(elapsed_time))
@@ -80,6 +91,16 @@ class MonteCarlo:
                     break
                 elif elapsed_time < self._loop_time:
                     time.sleep(self._loop_time-elapsed_time)
+
+        rospy.loginfo("interrupted!")
+        # Saves error to file
+        with open('pos_error.txt', 'w+') as f:
+            for error in self._position_error:
+                f.write("%s\n" % error)
+
+        with open('theta_error.txt', 'w+') as f:
+            for error in self._theta_error:
+                f.write("%s\n" % error)
 
     def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
@@ -119,18 +140,11 @@ class MonteCarlo:
 
 
         if sum(weight_list) == 0:
-            # rospy.loginfo("the weights are 0\n")
-            # rospy.loginfo("Laserdata:" + str(max(self._laser_point_list)))
-
             self._initialize_particles()
             return self._particles
 
-        # rospy.loginfo(weight_list)
-
         # normalize the weights
         weight_list = self._normalize_weights(weight_list)
-
-        ##rospy.loginfo(weight_list)
 
         # Before resampling: Check the number of effective particles
         m = self._number_of_particles
@@ -142,10 +156,10 @@ class MonteCarlo:
         # TODO: This we have to test to see if it resamples enough! Only a tump of rule to use paticles = M/2
         if n_eff < m/2:
             # sample the new particles
-            rospy.loginfo("RESAMPLES")
+            #rospy.loginfo("RESAMPLES")
             particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
-        else:
-            rospy.loginfo("Doesnt resample!")
+        #else:
+            #rospy.loginfo("Doesnt resample!")
 
         # return the new set of particles
         return particle_list
@@ -191,6 +205,43 @@ class MonteCarlo:
 
 
         return x, y, theta
+
+    def error_measurement(self, actual_robot_pose, estimated_robot_pose):
+       """
+       :param actual_robot_pose:
+       :param estimated_robot_pose:
+       :return: error
+       """
+       dif_x = (actual_robot_pose[0] - estimated_robot_pose[0])
+       dif_y = (actual_robot_pose[1] - estimated_robot_pose[1])
+       dif_position = numpy.sqrt(dif_x**2 + dif_y**2)
+
+       estimated_robot_theta = estimated_robot_pose[2] % (numpy.pi*2)
+       dif_theta = abs(actual_robot_pose[2] - estimated_robot_theta)
+       error = (dif_position, dif_theta)
+       # TODO
+       rospy.loginfo("ERROR   sqrt(x,y) = " + str(error[0]) + "     theta error = " + str(error[1]))
+       #rospy.loginfo("REAL x =" + str(self._real_position[0]) + "  y =" + str(self._real_position[1]) + "   theta =" + str(self._real_position[2]))
+       return error
+
+    def _calculate_mean_location(self, particles):
+        x = []
+        y = []
+        theta = []
+        # estimated_location = []
+
+        for particle in particles:
+            x.append(particle[0])
+            y.append(particle[1])
+            theta.append(particle[2])
+
+        x_mean = numpy.mean(x)
+        y_mean = numpy.mean(y)
+        theta_mean = numpy.mean(theta)
+
+        #rospy.loginfo("ESTIMATED x =" + str(x_mean) + "  y =" + str(y_mean) + "   theta =" + str(theta_mean))
+
+        return (x_mean, y_mean, theta_mean)
 
     #TEST
     def _normalize_weights(self, weights):
@@ -582,6 +633,8 @@ class MonteCarlo:
             pass
 
         rospy.Subscriber("/RosAria/pose", Odometry, self.callback_odometry)
+        rospy.Subscriber('/PoseStamped', PoseStamped, self.callback_real_position)
+
 
 
 
@@ -648,6 +701,19 @@ class MonteCarlo:
         """
         self._map = occupancy_grid_msg.data  # Total map
         self._occupancy_grid_msg = occupancy_grid_msg
+
+    def callback_real_position(self, pose_stamped_msg):
+
+        x = pose_stamped_msg.pose.position.x + 15.880000
+        y = pose_stamped_msg.pose.position.y + 15.240000
+
+        quaternion = pose_stamped_msg.pose.orientation
+
+        euler = tf.transformations.euler_from_quaternion([quaternion.x, quaternion.y, quaternion.z, quaternion.w],
+                                                         axes='sxyz')
+
+        self._real_position = (x, y , euler[2] + 1.57079632679)
+
 
 
 if __name__ == '__main__':
