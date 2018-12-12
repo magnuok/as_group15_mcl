@@ -36,10 +36,10 @@ class MonteCarlo:
     _position_error = []
     _theta_error = []
 
-    _number_of_particles = 200
+    _number_of_particles = 50
 
     _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 2 # Loop time in seconds
+    _loop_time = 1 # Loop time in seconds
     _n_eff = 0 # For resampling
 
     _is_new_odometry = False
@@ -78,19 +78,29 @@ class MonteCarlo:
                 self._publish_pose_array(self._pose_array)
 
                 # TEST
-                estimated_location = self._calculate_mean_location(self._particles)
-                error = self.error_measurement(self._real_position, estimated_location)
-                self._position_error.append(error[0])
-                self._theta_error.append(error[1])
+                estimated_location_mean = self._calculate_mean_location(self._particles)
+                estimated_location_median = self._calculate_median_location(self._particles)
+
+                error_mean = self.error_measurement(self._real_position, estimated_location_mean)
+                error_median = self.error_measurement(self._real_position, estimated_location_median)
+                rospy.loginfo("Error using mean: " + str(error_mean))
+                rospy.loginfo("Error using median:" + str(error_median))
+                rospy.loginfo("\n")
+
+                self._position_error.append(error_mean[0])
+                self._theta_error.append(error_mean[1])
 
                 # Loop with constant time.
                 elapsed_time = time.time() - start_time
                 # rospy .loginfo("Loop time = " + str(elapsed_time))
+                rospy.loginfo("Iteration time = " + str(elapsed_time))
                 if elapsed_time > self._loop_time:
                     rospy.loginfo("EXCEED LOOP TIME:" + str(elapsed_time))
+                    rospy.loginfo("Number of particles = " + str(len(self._particles)))
                     break
                 elif elapsed_time < self._loop_time:
                     time.sleep(self._loop_time-elapsed_time)
+
 
         rospy.loginfo("interrupted!")
         # Saves error to file
@@ -111,6 +121,9 @@ class MonteCarlo:
         :param map: the map we want to localize the robot in.
         :return: the new list of particles.
         """
+        #Varible that is true while 1 or more particles are inside the map
+        all_particles_inside_map = False
+
         # the new particles
         particle_list = []
         # the old_particles after applying the motion_model
@@ -125,6 +138,13 @@ class MonteCarlo:
             predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
 
+            # x and y coordinates for particle in the grid map.
+            x = int(predicted_particle[0] / self._occupancy_grid_msg.info.resolution)
+            y = int(predicted_particle[1] / self._occupancy_grid_msg.info.resolution)
+
+            # if one particle is inside the map all_particles_inside_map will be true
+            if self.get_occupancy_value(x, y, map) != -1 and not all_particles_inside_map:
+                all_particles_inside_map = True
 
 
             # TEST
@@ -158,6 +178,12 @@ class MonteCarlo:
             # sample the new particles
             #rospy.loginfo("RESAMPLES")
             particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+        elif not all_particles_inside_map:
+            rospy.loginfo("All particles outside map => RESAMPLE")
+            self._particles = []
+            self._initialize_particles()
+            particle_list = self._particles
+
         #else:
             #rospy.loginfo("Doesnt resample!")
 
@@ -185,10 +211,10 @@ class MonteCarlo:
 
 
 
-        ALFA_1 = 0.05;
-        ALFA_2 = 0.05;
-        ALFA_3 = 0.05;
-        ALFA_4 = 0.05;
+        ALFA_1 = 0.1;
+        ALFA_2 = 0.1;
+        ALFA_3 = 0.1;
+        ALFA_4 = 0.1;
 
         delta_rot_1 = numpy.arctan2(odometry[1]-old_odometry[1], odometry[0]-old_odometry[0]) - old_odometry[2]
         delta_trans = math.sqrt(pow(odometry[0]-old_odometry[0], 2) + pow(odometry[1]-old_odometry[1], 2))
@@ -220,7 +246,7 @@ class MonteCarlo:
        dif_theta = abs(actual_robot_pose[2] - estimated_robot_theta)
        error = (dif_position, dif_theta)
        # TODO
-       rospy.loginfo("ERROR   sqrt(x,y) = " + str(error[0]) + "     theta error = " + str(error[1]))
+       #rospy.loginfo("ERROR   sqrt(x,y) = " + str(error[0]) + "     theta error = " + str(error[1]))
        #rospy.loginfo("REAL x =" + str(self._real_position[0]) + "  y =" + str(self._real_position[1]) + "   theta =" + str(self._real_position[2]))
        return error
 
@@ -242,6 +268,24 @@ class MonteCarlo:
         #rospy.loginfo("ESTIMATED x =" + str(x_mean) + "  y =" + str(y_mean) + "   theta =" + str(theta_mean))
 
         return (x_mean, y_mean, theta_mean)
+
+    def _calculate_median_location(self, particles):
+        x = []
+        y = []
+        theta = []
+        # estimated_location = []
+
+        for particle in particles:
+            x.append(particle[0])
+            y.append(particle[1])
+            theta.append(particle[2])
+
+        x_median = numpy.median(x)
+        y_median = numpy.median(y)
+        theta_median = numpy.median(theta)
+
+
+        return (x_median, y_median, theta_median)
 
     #TEST
     def _normalize_weights(self, weights):
@@ -279,7 +323,7 @@ class MonteCarlo:
         ### predicted_particle = (x, y, theta)
 
         # standard deviation ( = variance**2 = 0.2 for our SD)
-        sigma = 1
+        sigma = 1.5
         # probability
         # IMPORTANT, weight is set to zero because of logaritmic sum of weights
         weight = 1
