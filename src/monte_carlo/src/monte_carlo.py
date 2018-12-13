@@ -36,10 +36,10 @@ class MonteCarlo:
     _position_error = []
     _theta_error = []
 
-    _number_of_particles = 50
+    _number_of_particles = 1
 
     _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 1 # Loop time in seconds
+    _loop_time = 1.3 # Loop time in seconds
     _n_eff = 0 # For resampling
 
     _is_new_odometry = False
@@ -80,11 +80,12 @@ class MonteCarlo:
                 # TEST
                 estimated_location_mean = self._calculate_mean_location(self._particles)
                 estimated_location_median = self._calculate_median_location(self._particles)
-
+                rospy.loginfo("Paticle position" + str(self._particles[0]))
+                rospy.loginfo("Real position = " + str(self._real_position))
                 error_mean = self.error_measurement(self._real_position, estimated_location_mean)
                 error_median = self.error_measurement(self._real_position, estimated_location_median)
-                rospy.loginfo("Error using mean: " + str(error_mean))
-                rospy.loginfo("Error using median:" + str(error_median))
+                #rospy.loginfo("Error using mean: " + str(error_mean))
+                #rospy.loginfo("Error using median:" + str(error_median))
                 rospy.loginfo("\n")
 
                 self._position_error.append(error_mean[0])
@@ -93,7 +94,7 @@ class MonteCarlo:
                 # Loop with constant time.
                 elapsed_time = time.time() - start_time
                 # rospy .loginfo("Loop time = " + str(elapsed_time))
-                rospy.loginfo("Iteration time = " + str(elapsed_time))
+                #rospy.loginfo("Iteration time = " + str(elapsed_time))
                 if elapsed_time > self._loop_time:
                     rospy.loginfo("EXCEED LOOP TIME:" + str(elapsed_time))
                     rospy.loginfo("Number of particles = " + str(len(self._particles)))
@@ -212,7 +213,7 @@ class MonteCarlo:
 
 
         ALFA_1 = 0.1;
-        ALFA_2 = 0.1;
+        ALFA_2 = 0.08;
         ALFA_3 = 0.1;
         ALFA_4 = 0.1;
 
@@ -661,8 +662,8 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            #self._particles.append((15, 20.5, numpy.pi/6.5))
-            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            self._particles.append((15.880000, 15.240000 , 0))
+            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
@@ -748,8 +749,8 @@ class MonteCarlo:
 
     def callback_real_position(self, pose_stamped_msg):
 
-        x = pose_stamped_msg.pose.position.x + 15.880000
-        y = pose_stamped_msg.pose.position.y + 15.240000
+        x = -pose_stamped_msg.pose.position.y + 15.880000
+        y = pose_stamped_msg.pose.position.x + 15.240000
 
         quaternion = pose_stamped_msg.pose.orientation
 
