@@ -31,20 +31,24 @@ class MonteCarlo:
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
     _free_space_list = []  # Only free space
-
+    _is_new_odometry = False
+    _is_new_laser_data = False
+    _first_odom = True
     _real_position = ()
     _position_error = []
     _theta_error = []
 
-    _number_of_particles = 50
-
-    _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 0.7 # Loop time in seconds
+    _number_of_particles = 10
+    _num_of_measurements = 4 # should be a value of 512 mod(num_measurements) = 0
+    _loop_time = 0.5 # Loop time in seconds
     _n_eff = 0 # For resampling
+    _sigma = 1.5
+    ALFA_1 = 0.1 # rotation
+    ALFA_2 = 0.1 # translation
+    ALFA_3 = 0.1 # translation
+    ALFA_4 = 0.1 # rotation
+    _resample_threshold = _number_of_particles / 2
 
-    _is_new_odometry = False
-    _is_new_laser_data = False
-    _first_odom = True
 
     def __init__(self, testing = False):
         # Initialize mcl node
@@ -95,12 +99,12 @@ class MonteCarlo:
 
                 # Loop with constant time.
                 elapsed_time = time.time() - start_time
-                # rospy .loginfo("Loop time = " + str(elapsed_time))
-                #rospy.loginfo("Iteration time = " + str(elapsed_time))
+                rospy .loginfo("Loop time = " + str(elapsed_time))
+
                 if elapsed_time > self._loop_time:
                     rospy.loginfo("EXCEED LOOP TIME:" + str(elapsed_time))
                     rospy.loginfo("Number of particles = " + str(len(self._particles)))
-                    break
+                    # break
                 elif elapsed_time < self._loop_time:
                     time.sleep(self._loop_time-elapsed_time)
 
@@ -138,7 +142,7 @@ class MonteCarlo:
         # rospy.loginfo("Predicts new particle positions")
         for particle in old_particles:
             # get new poses after applying the motion_model
-            predicted_particle = MonteCarlo.sample_motion_model_odometry(odometry, old_odometry, particle)
+            predicted_particle = self.sample_motion_model_odometry(odometry, old_odometry, particle)
             predicted_particles_list.append(predicted_particle)
 
             # x and y coordinates for particle in the grid map.
@@ -172,14 +176,13 @@ class MonteCarlo:
         weight_list = self._normalize_weights(weight_list)
 
         # Before resampling: Check the number of effective particles
-        m = self._number_of_particles
         temp = 0
         for weight in weight_list:
            temp = temp + weight**2
 
         n_eff = 1/temp
         # TODO: This we have to test to see if it resamples enough! Only a tump of rule to use paticles = M/2
-        if n_eff < m/2:
+        if n_eff < self._resample_threshold:
             # sample the new particles
             #rospy.loginfo("RESAMPLES")
             particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
@@ -195,8 +198,7 @@ class MonteCarlo:
         # return the new set of particles
         return particle_list
 
-    @classmethod
-    def sample_motion_model_odometry(cls, odometry, old_odometry, x_last):
+    def sample_motion_model_odometry(self, odometry, old_odometry, x_last):
         """
         Not sure if it's correct to specify this as a classmethod. Same goes for staticmethod underneath.
 
@@ -214,20 +216,13 @@ class MonteCarlo:
         # TODO: maybe move these to the top of the class, or the top of the module
         # constants
 
-
-
-        ALFA_1 = 0.1;
-        ALFA_2 = 0.08;
-        ALFA_3 = 0.1;
-        ALFA_4 = 0.1;
-
         delta_rot_1 = numpy.arctan2(odometry[1]-old_odometry[1], odometry[0]-old_odometry[0]) - old_odometry[2]
         delta_trans = math.sqrt(pow(odometry[0]-old_odometry[0], 2) + pow(odometry[1]-old_odometry[1], 2))
         delta_rot_2 = odometry[2] - old_odometry[2] - delta_rot_1
 
-        delta_rot_1_hat = delta_rot_1 - cls.sample(abs(ALFA_1 * delta_rot_1 + ALFA_2 * delta_trans))
-        delta_trans_hat = delta_trans - cls.sample(abs(ALFA_3 * delta_trans + ALFA_4 * (delta_rot_1 + delta_rot_2)))
-        delta_rot_2_hat = delta_rot_2 - cls.sample(abs(ALFA_1 * delta_rot_2 + ALFA_2 * delta_trans))
+        delta_rot_1_hat = delta_rot_1 - self.sample(abs(self.ALFA_1 * delta_rot_1 + self.ALFA_2 * delta_trans))
+        delta_trans_hat = delta_trans - self.sample(abs(self.ALFA_3 * delta_trans + self.ALFA_4 * (delta_rot_1 + delta_rot_2)))
+        delta_rot_2_hat = delta_rot_2 - self.sample(abs(self.ALFA_1 * delta_rot_2 + self.ALFA_2 * delta_trans))
 
         x = x_last[0] + delta_trans_hat * math.cos(x_last[2] + delta_rot_1)
         y = x_last[1] + delta_trans_hat * math.sin(x_last[2] + delta_rot_1)
@@ -328,7 +323,6 @@ class MonteCarlo:
         ### predicted_particle = (x, y, theta)
 
         # standard deviation ( = variance**2 = 0.2 for our SD)
-        sigma = 1.5
         # probability
         # IMPORTANT, weight is set to zero because of logaritmic sum of weights
         weight = 1
@@ -376,9 +370,9 @@ class MonteCarlo:
             else:
                 # integrate over z_t, integrate.quad gives two values (the integral sum and the error),
                 # we are only interested in the integral.
-                eta = numpy.divide(1, (scipy.integrate.quad(self.gaussian, 0, zmax, args=(sigma, z_t_star))[0]))
+                eta = numpy.divide(1, (scipy.integrate.quad(self.gaussian, 0, zmax, args=(self._sigma, z_t_star))[0]))
 
-                p_hit = eta * self.gaussian(laser_point, sigma, z_t_star)
+                p_hit = eta * self.gaussian(laser_point, self._sigma, z_t_star)
                 p_rand = 1/zmax
                 p_max = 0
 
@@ -666,8 +660,8 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            #self._particles.append((15.880000, 15.240000 , 0))
-            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            self._particles.append((15.880000, 15.240000 , 0))
+            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
