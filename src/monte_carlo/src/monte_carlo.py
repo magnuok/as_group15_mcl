@@ -43,10 +43,10 @@ class MonteCarlo:
     _loop_time = 0.3 # Loop time in seconds
     _n_eff = 0 # For resampling
     _sigma = 1.5
-    ALFA_1 = 0.05 # rotation
+    ALFA_1 = 0.01 # rotation
     ALFA_2 = 0.5 # translation
     ALFA_3 = 0.5 # translation
-    ALFA_4 = 0.05 # rotation
+    ALFA_4 = 0.01 # rotation
     _resample_threshold = _number_of_particles / 2
 
 
