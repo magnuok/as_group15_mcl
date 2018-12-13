@@ -38,15 +38,15 @@ class MonteCarlo:
     _position_error = []
     _theta_error = []
 
-    _number_of_particles = 10
+    _number_of_particles = 50
     _num_of_measurements = 4 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 0.5 # Loop time in seconds
+    _loop_time = 0.3 # Loop time in seconds
     _n_eff = 0 # For resampling
     _sigma = 1.5
-    ALFA_1 = 0.1 # rotation
-    ALFA_2 = 0.1 # translation
-    ALFA_3 = 0.1 # translation
-    ALFA_4 = 0.1 # rotation
+    ALFA_1 = 0.05 # rotation
+    ALFA_2 = 0.5 # translation
+    ALFA_3 = 0.5 # translation
+    ALFA_4 = 0.05 # rotation
     _resample_threshold = _number_of_particles / 2
 
 
@@ -76,10 +76,11 @@ class MonteCarlo:
                 # Set flags to false
                 self._is_new_laser_data = False
                 self._is_new_odometry = False
+                midl_odom = self._odometry
 
                 self._particles = self._update_particle_list(self._particles, self._odometry, self._old_odometry, self._laser_point_list,
                                                              self._map)
-                self._old_odometry = self._odometry  # set old odom to this odom
+                self._old_odometry = midl_odom  # set old odom to this odom
                 self._pose_array = self._update_pose_array(self._particles)
                 self._publish_pose_array(self._pose_array)
 
@@ -660,8 +661,8 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            self._particles.append((15.880000, 15.240000 , 0))
-            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            #self._particles.append((15.880000, 15.240000 , 0))
+            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
