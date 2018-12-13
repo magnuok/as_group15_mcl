@@ -30,16 +30,16 @@ class MonteCarlo:
     _pose_array = PoseArray()
     _occupancy_grid_msg = OccupancyGrid()
     publisher = None
+    _free_space_list = []  # Only free space
 
-    #TEST
     _real_position = ()
     _position_error = []
     _theta_error = []
 
-    _number_of_particles = 1
+    _number_of_particles = 50
 
     _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 1.3 # Loop time in seconds
+    _loop_time = 0.7 # Loop time in seconds
     _n_eff = 0 # For resampling
 
     _is_new_odometry = False
@@ -53,8 +53,11 @@ class MonteCarlo:
             # initializes particles and publisher
             self._initialize_publisher()
             self._initialize_subscribers()
-            self._initialize_particles()
 
+            start_time = time.time()  # start time of loop [seconds]
+            self._initialize_particles()
+            elapsed_time = time.time() - start_time
+            rospy.loginfo("Init particle time:" + str(elapsed_time))
             # Update pose_array
             self._update_pose_array(self._particles)
             # Publish the initial Particles
@@ -66,7 +69,6 @@ class MonteCarlo:
         while not rospy.is_shutdown():
             start_time = time.time()  # start time of loop [seconds]
             if self._is_new_odometry and self._is_new_laser_data:
-                # rospy.loginfo("Starrts")
                 # Set flags to false
                 self._is_new_laser_data = False
                 self._is_new_odometry = False
@@ -80,13 +82,13 @@ class MonteCarlo:
                 # TEST
                 estimated_location_mean = self._calculate_mean_location(self._particles)
                 estimated_location_median = self._calculate_median_location(self._particles)
-                rospy.loginfo("Paticle position" + str(self._particles[0]))
-                rospy.loginfo("Real position = " + str(self._real_position))
+                #rospy.loginfo("Paticle position" + str(self._particles[0]))
+                #rospy.loginfo("Real position = " + str(self._real_position))
                 error_mean = self.error_measurement(self._real_position, estimated_location_mean)
                 error_median = self.error_measurement(self._real_position, estimated_location_median)
                 #rospy.loginfo("Error using mean: " + str(error_mean))
                 #rospy.loginfo("Error using median:" + str(error_median))
-                rospy.loginfo("\n")
+                #rospy.loginfo("\n")
 
                 self._position_error.append(error_mean[0])
                 self._theta_error.append(error_mean[1])
@@ -159,9 +161,11 @@ class MonteCarlo:
         # rospy.loginfo("Particles:" + str(old_particles))
         # rospy.loginfo("Weights:" + str(weight_list))
 
-
         if sum(weight_list) == 0:
+            start_time = time.time()  # start time of loop [seconds]
             self._initialize_particles()
+            elapsed_time = time.time() - start_time
+            rospy.loginfo("Init particle loop time after resampling:" + str(elapsed_time))
             return self._particles
 
         # normalize the weights
@@ -633,17 +637,17 @@ class MonteCarlo:
         width = self._occupancy_grid_msg.info.width
 
         # The cell arrays:
-        free_space_list = []  # Only free space
         initial_particle_placement = []  # list with initial cells
 
-        # add the element numbers that are free
-        for i in range(0, len(self._map)):
-            if self._map[i] != 100 and self._map[i] != -1:
-                free_space_list.append(i)
+        if len(self._free_space_list) == 0:
+            # add the element numbers that are free
+            for i in range(0, len(self._map)):
+                if self._map[i] != 100 and self._map[i] != -1:
+                    self._free_space_list.append(i)
 
         # pick random free cells
         for i in range(0, self._number_of_particles):
-            initial_particle_placement.append(random.choice(free_space_list))
+            initial_particle_placement.append(random.choice(self._free_space_list))
 
         # Find the corresponding row and col number of each particle
         # Add the particle tuple (x, y, theta) to initial_particle_placement
@@ -662,8 +666,8 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            self._particles.append((15.880000, 15.240000 , 0))
-            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            #self._particles.append((15.880000, 15.240000 , 0))
+            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
@@ -764,4 +768,3 @@ class MonteCarlo:
 if __name__ == '__main__':
     mcl = MonteCarlo()
     mcl.loop()
-    #rospy.spin()
