@@ -33,13 +33,16 @@ class MonteCarlo:
 
     #TEST
     _real_position = ()
-    _position_error = []
-    _theta_error = []
+    _position_error_mean = []
+    _theta_error_mean = []
+    _position_error_median = []
+    _theta_error_median = []
 
-    _number_of_particles = 1
+    _number_of_particles = 50
+    _resample_criterion = _number_of_particles / 2
 
     _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 1.3 # Loop time in seconds
+    _loop_time = 0.7 # Loop time in seconds
     _n_eff = 0 # For resampling
 
     _is_new_odometry = False
@@ -80,20 +83,21 @@ class MonteCarlo:
                 # TEST
                 estimated_location_mean = self._calculate_mean_location(self._particles)
                 estimated_location_median = self._calculate_median_location(self._particles)
-                rospy.loginfo("Paticle position" + str(self._particles[0]))
-                rospy.loginfo("Real position = " + str(self._real_position))
+                #rospy.loginfo("Paticle position" + str(self._particles[0]))
+                #rospy.loginfo("Real position = " + str(self._real_position))
                 error_mean = self.error_measurement(self._real_position, estimated_location_mean)
                 error_median = self.error_measurement(self._real_position, estimated_location_median)
-                #rospy.loginfo("Error using mean: " + str(error_mean))
-                #rospy.loginfo("Error using median:" + str(error_median))
+                rospy.loginfo("Error using mean: " + str(error_mean))
+                rospy.loginfo("Error using median:" + str(error_median))
                 rospy.loginfo("\n")
 
-                self._position_error.append(error_mean[0])
-                self._theta_error.append(error_mean[1])
-
+                self._position_error_mean.append(error_mean[0])
+                self._theta_error_mean.append(error_mean[1])
+                self._position_error_median.append(error_median[0])
+                self._theta_error_median.append(error_median[1])
                 # Loop with constant time.
                 elapsed_time = time.time() - start_time
-                # rospy .loginfo("Loop time = " + str(elapsed_time))
+                rospy .loginfo("Loop time = " + str(elapsed_time))
                 #rospy.loginfo("Iteration time = " + str(elapsed_time))
                 if elapsed_time > self._loop_time:
                     rospy.loginfo("EXCEED LOOP TIME:" + str(elapsed_time))
@@ -105,12 +109,20 @@ class MonteCarlo:
 
         rospy.loginfo("interrupted!")
         # Saves error to file
-        with open('pos_error.txt', 'w+') as f:
-            for error in self._position_error:
+        with open('pos_error_mean.txt', 'w+') as f:
+            for error in self._position_error_mean:
                 f.write("%s\n" % error)
 
-        with open('theta_error.txt', 'w+') as f:
-            for error in self._theta_error:
+        with open('pos_error_median.txt', 'w+') as f:
+            for error in self._position_error_median:
+                f.write("%s\n" % error)
+
+        with open('theta_error_mean.txt', 'w+') as f:
+            for error in self._theta_error_mean:
+                f.write("%s\n" % error)
+
+        with open('theta_error_median.txt', 'w+') as f:
+            for error in self._theta_error_median:
                 f.write("%s\n" % error)
 
     def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
@@ -168,14 +180,13 @@ class MonteCarlo:
         weight_list = self._normalize_weights(weight_list)
 
         # Before resampling: Check the number of effective particles
-        m = self._number_of_particles
         temp = 0
         for weight in weight_list:
            temp = temp + weight**2
 
         n_eff = 1/temp
         # TODO: This we have to test to see if it resamples enough! Only a tump of rule to use paticles = M/2
-        if n_eff < m/2:
+        if n_eff < self._resample_criterion:
             # sample the new particles
             #rospy.loginfo("RESAMPLES")
             particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
@@ -662,8 +673,7 @@ class MonteCarlo:
 
             # Adds all particles to list SHOULD CHANGE NAMES HERE TO GET WIDTH ON X AND HEIGHT ON Y
             # TODO: check if its correct
-            self._particles.append((15.880000, 15.240000 , 0))
-            #self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
+            self._particles.append((particle_height, particle_width, random.uniform(0, 2 * math.pi)))
 
     def _initialize_publisher(self):
         # initialize the publisher object
