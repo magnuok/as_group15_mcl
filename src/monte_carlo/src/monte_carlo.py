@@ -20,7 +20,6 @@ class MonteCarlo:
     Class description
     """
 
-    # TODO: maybe remove these, put them in __init__
     _laser_point_list = []  # List with laserscan. Scanning [pi, 0]. 512 scanss
     _odometry = ()  # Contains the new odometry tuppel = (x,y,theta)
     _old_odometry = () # contains the odometry used in last iteration of __update_particle_list
@@ -34,12 +33,10 @@ class MonteCarlo:
     _is_new_laser_data = False
     _first_odom = True
     _real_position = ()
-    _position_error = []
-    _theta_error = []
-    rviz = False # set to true to send particles to rviz
+
 
     # parameters
-    _number_of_particles = 50
+    _number_of_particles = 200
     _num_of_measurements = 4 # should be a value of 512 mod(num_measurements) = 0
     _loop_time = 0.3 # Loop time in seconds
     _sigma = 1
@@ -57,6 +54,9 @@ class MonteCarlo:
     _mocap_pose_after_iteration = []
     _mocap_pose_before_iteration = []
 
+    # Optimization parameteres
+    rviz = False  # set to true to send particles to rviz
+
     def __init__(self):
         # Initialize mcl node
         rospy.init_node('monte_carlo', anonymous=True)
@@ -68,10 +68,10 @@ class MonteCarlo:
         self._initialize_particles()
         elapsed_time = time.time() - start_time
         rospy.loginfo("Init particle time:" + str(elapsed_time))
-        # Update pose_array
-        self._update_pose_array(self._particles)
-        # Publish the initial Particles
-        self._publish_pose_array(self._pose_array)
+
+        if self.rviz == True:
+            self._update_pose_array(self._particles)
+            self._publish_pose_array(self._pose_array)
 
     def loop(self):
         # While not mcl is terminated by user
@@ -82,17 +82,17 @@ class MonteCarlo:
                 self._is_new_laser_data = False
                 self._is_new_odometry = False
                 midl_odom = self._odometry
-
                 self._mocap_pose_before_iteration.append(self._real_position)
-                self._particles = self._update_particle_list(self._particles, self._odometry, self._old_odometry, self._laser_point_list,
-                                                             self._map)
+                self._particles = self._update_particle_list(self._particles, self._odometry, self._old_odometry,
+                                                             self._laser_point_list, self._map)
                 self._mocap_pose_after_iteration.append(self._real_position)
-
                 self._old_odometry = midl_odom  # set old odom to this odom
-                self._pose_array = self._update_pose_array(self._particles)
-                self._publish_pose_array(self._pose_array)
 
-                # Loop with constant time.
+                if self.rviz == True:
+                    self._pose_array = self._update_pose_array(self._particles)
+                    self._publish_pose_array(self._pose_array)
+
+                # Loop with constant time
                 elapsed_time = time.time() - start_time
                 rospy .loginfo("Loop time = " + str(elapsed_time))
                 self._iteration_time.append(elapsed_time)
@@ -120,32 +120,41 @@ class MonteCarlo:
             f.write("%s\n" % self._resample_threshold)
 
         # Saves iteration time to file
-        with open('iteration_time.txt' + ending + '.txt', 'w+') as f:
+        with open('iteration_time' + ending + '.txt', 'w+') as f:
             for element in self._iteration_time:
                 f.write("%s\n" % element)
 
-        with open('_weights.txt' + ending + '.txt', 'w+') as f:
-            for element in self._weights:
-                f.write("%s\n" % element)
+        with open('_weights' + ending + '.txt', 'w+') as f:
+            for list in self._weights:
+                for element in list:
+                    f.write("%s\n" % element)
 
         # Saves error to file
         with open('_particle_list_before_resampling' + ending + '.txt', 'w+') as f:
             for list in self._particle_list_before_resampling:
-                for element in list:
-                    f.write("%s\n" % str(element))
+                for tuple in list:
+                    for element in tuple:
+                        f.write("%s " % str(element))
+                    f.write("\n")
 
         with open('_particle_list_after_resampling' + ending + '.txt', 'w+') as f:
             for list in self._particle_list_after_resampling:
-                for element in list:
-                    f.write("%s\n" % str(element))
+                for tuple in list:
+                    for element in tuple:
+                        f.write("%s " % str(element))
+                    f.write("\n")
 
         with open('_mocap_pose_after_iteration' + ending + '.txt', 'w+') as f:
-            for element in self._mocap_pose_after_iteration:
-                f.write("%s\n" % str(element))
+            for tuple in self._mocap_pose_after_iteration:
+                for element in tuple:
+                    f.write("%s " % str(element))
+                f.write("\n")
 
         with open('_mocap_pose_before_iteration' + ending + '.txt', 'w+') as f:
-            for element in self._mocap_pose_before_iteration:
-                f.write("%s\n" % str(element))
+            for tuple in self._mocap_pose_before_iteration:
+                for element in tuple:
+                    f.write("%s " % str(element))
+                f.write("\n")
 
     def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
@@ -187,8 +196,9 @@ class MonteCarlo:
             # get weights corresponding to the new pose_list
             weight_list.append(self.measurement_model(laser_points, predicted_particle, map))
 
-        self._pose_array = self._update_pose_array(predicted_particles_list)
-        self._publish_pose_array(self._pose_array)
+        if self.rviz == True:
+            self._pose_array = self._update_pose_array(predicted_particles_list)
+            self._publish_pose_array(self._pose_array)
 
         particle_list = predicted_particles_list
         # rospy.loginfo("Particles:" + str(old_particles))
@@ -323,7 +333,6 @@ class MonteCarlo:
 
         return (x_median, y_median, theta_median)
 
-
     def _normalize_weights(self, weights):
         """
         sums all the weights. divides each weight by weightsum.
@@ -339,7 +348,6 @@ class MonteCarlo:
             weights[i] = weights[i]/sum_weights
 
         return weights
-
 
     def measurement_model(self, laser_points, predicted_particle, map):
         """
@@ -784,7 +792,6 @@ class MonteCarlo:
 
         euler = tf.transformations.euler_from_quaternion([quaternion.x, quaternion.y, quaternion.z, quaternion.w],
                                                          axes='sxyz')
-
         self._real_position = (x, y , euler[2] + 1.57079632679)
 
 
