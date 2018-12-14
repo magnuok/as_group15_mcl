@@ -106,7 +106,9 @@ class MonteCarlo:
 
         rospy.loginfo("interrupted!\n")
 
-        with open('information.txt', 'w+' + str(time.time())) as f:
+        ending = str(time.time())
+
+        with open('information' + ending + '.txt', 'w+') as f:
             f.write("%s\n" % self._number_of_particles)
             f.write("%s\n" % self._num_of_measurements)
             f.write("%s\n" % self._loop_time)
@@ -118,30 +120,30 @@ class MonteCarlo:
             f.write("%s\n" % self._resample_threshold)
 
         # Saves iteration time to file
-        with open('iteration_time.txt' + str(time.time()), 'w+') as f:
+        with open('iteration_time.txt' + ending + '.txt', 'w+') as f:
             for element in self._iteration_time:
                 f.write("%s\n" % element)
 
-        with open('_weights.txt' + str(time.time()), 'w+') as f:
+        with open('_weights.txt' + ending + '.txt', 'w+') as f:
             for element in self._weights:
                 f.write("%s\n" % element)
 
         # Saves error to file
-        with open('_particle_list_before_resampling.txt' + str(time.time()), 'w+') as f:
+        with open('_particle_list_before_resampling' + ending + '.txt', 'w+') as f:
             for list in self._particle_list_before_resampling:
                 for element in list:
                     f.write("%s\n" % str(element))
 
-        with open('_particle_list_after_resampling.txt' + str(time.time()), 'w+') as f:
+        with open('_particle_list_after_resampling' + ending + '.txt', 'w+') as f:
             for list in self._particle_list_after_resampling:
                 for element in list:
                     f.write("%s\n" % str(element))
 
-        with open('_mocap_pose_after_iteration.txt' + str(time.time()), 'w+') as f:
+        with open('_mocap_pose_after_iteration' + ending + '.txt', 'w+') as f:
             for element in self._mocap_pose_after_iteration:
                 f.write("%s\n" % str(element))
 
-        with open('_mocap_pose_before_iteration.txt' + str(time.time()), 'w+') as f:
+        with open('_mocap_pose_before_iteration' + ending + '.txt', 'w+') as f:
             for element in self._mocap_pose_before_iteration:
                 f.write("%s\n" % str(element))
 
