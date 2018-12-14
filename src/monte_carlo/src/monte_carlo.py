@@ -13,6 +13,8 @@ import math
 import numpy
 import time
 import scipy.integrate
+import cProfile
+import pstats
 
 
 class MonteCarlo:
@@ -55,7 +57,7 @@ class MonteCarlo:
     _mocap_pose_before_iteration = []
 
     # Optimization parameteres
-    rviz = False  # set to true to send particles to rviz
+    rviz = True  # set to true to send particles to rviz
 
     def __init__(self):
         # Initialize mcl node
@@ -190,7 +192,6 @@ class MonteCarlo:
             # if one particle is inside the map all_particles_inside_map will be true
             if self.get_occupancy_value(x, y, map) != -1 and not all_particles_inside_map:
                 all_particles_inside_map = True
-
 
             # TEST
             # get weights corresponding to the new pose_list
@@ -514,8 +515,12 @@ class MonteCarlo:
         x_end = x_0 + int(distance * numpy.cos(theta))
         y_end = y_0 + int(distance * numpy.sin(theta))
 
-        # Gets grids between start and end points
-        grids = self.bresenham(x_0, y_0, x_end, y_end)
+        # Gets grids between start and end points OR the actual value to the nearest occupied grid
+        grids = self.bresenham(x_0, y_0, x_end, y_end, map, map_occupancy_val)
+        #if length of grids equal 1 it mean that bresenham have returned the value to nearest grid and we
+        #return this value without further compuations.
+        if len(grids) == 1:
+            return grids[0] * self._occupancy_grid_msg.info.resolution
 
         # find the maximum x and y value the first occupied grid may have.
 
@@ -559,8 +564,7 @@ class MonteCarlo:
             return 0
         return numpy.random.normal(loc=0, scale=standard_deviation, size=None)
 
-    @staticmethod
-    def bresenham(x_0, y_0, x_end, y_end):
+    def bresenham(self, x_0, y_0, x_end, y_end, map, map_occupancy_val):
         """
         Sub function of ray_casting used for calculations of true value of z_t
         :param y_0:
@@ -603,7 +607,7 @@ class MonteCarlo:
         y = y_0
         # empty array of grid coordinates
         grids = []
-
+        distance = 0
         # iterates over x-coordinates (may be y-coordinates, if is_steep = true)
         # iterates over each x between x_0 and x_end
         # The error first get subtracted
@@ -617,12 +621,20 @@ class MonteCarlo:
             if error < 0:
                 y += y_step
                 error += dx
+            if not swapped:
+                occupancy_val = self.get_occupancy_value(x, y, map)
+                if map_occupancy_val < occupancy_val or occupancy_val == -1:
+                    distance = numpy.sqrt((x-x_0)**2 + (y-y_0)**2)
+                    break
 
         # reverse back list if they were reversed.
         if swapped:
             grids.reverse()
-
-        return grids
+            return grids
+        else:
+            #rospy.loginfo("Distance measured using new method")
+            distance_list = [distance]
+            return distance_list
 
     @staticmethod
     def low_variance_sampler(predicted_particles, weights):
@@ -798,4 +810,13 @@ class MonteCarlo:
 
 if __name__ == '__main__':
     mcl = MonteCarlo()
-    mcl.loop()
+    cProfile.run('mcl.loop()','stats')
+    p = pstats.Stats('stats')
+
+    # Sort by function taking a lot of time
+    p.strip_dirs().sort_stats('time')
+
+    # prints only the 10 most significant lines
+    p.print_stats(20)
+
+
