@@ -20,29 +20,16 @@ estimated_position = [];
 stop = number_of_particles;
 start = 1;
 for i = 1:length(weights) / number_of_particles
-   for val = sort(weights(start:stop));
-    val(1:10);
-    ind(1:10);
-    pose = mean(particle_list_after_resampling(ind(1:10),:));
+   for j = start:stop
+   [val, ind] = sort(weights(start:stop));
+   val(1:10);
+   ind(1:10);
+   pose = mean(particle_list_after_resampling(ind(1:10),:));
    end
 estimated_position = [estimated_position; pose];
-% Position estimation based on the highest weight
-estimated_position = [];
-start = 1;
-stop = number_of_particles;
-for i = 1:length(weights) / number_of_particles
-    for j = start:stop
-        [highest, index]  = max(weights(start:stop));
-    end
-estimated_position = [estimated_position ; particle_list_after_resampling(index,:)];
 start = start + number_of_particles;
 stop = stop + number_of_particles;
 end 
-
-
-
-
-
 
 %
 % %Position estimation based on the highest weight
@@ -128,8 +115,8 @@ iteration_time_min = min(iteration_time);
 iteration_time_max = max(iteration_time);
 iteration_time_var = var(iteration_time);
 %% box plot of timings
-boxplot(iteration_time)
-set(gca,'fontsize',16,'box','off')
+%boxplot(iteration_time)
+%set(gca,'fontsize',16,'box','off')
 
 
 %% historgram of iteration time
