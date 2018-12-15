@@ -144,3 +144,24 @@ for k = 1:length(estimated_position)
     drawnow;
     pause(0.1);
 end
+
+%% Calculate and plot error for multiple runs 
+
+pose_error_mean = mean(pose_error1, pose_error2, pose_error3, pose_error4, pose_error5);
+
+figure
+plot(t(1:length(error)),pose_error_mean(1:length(error)),'LineWidth', 1)
+set(gca,'fontsize',16,'box','off')
+title('Pose error mean with 1 m box')
+xlabel('time [s]')
+ylabel ('error [m]')
+
+hold on
+boxplot([pose_error1(1), pose_error2(1), pose_error3(1), pose_error4(1), pose_error5(1)])
+set(gca,'fontsize',16,'box','off')
+
+
+
+
+
+
