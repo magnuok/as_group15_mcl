@@ -147,6 +147,42 @@ end
 
 %% Calculate and plot error for multiple runs 
 
+close all;
+
+
+% Make a 3-by-8 matrix of 9s:
+
+information(1:10,1:5) = 0;
+mocap_pose_after_iteration(1:1000,1:5) = 0;
+mocap_pose_before_iteration(1:1000,1:5) = 0;
+particle_list_after_resampling(1:1000,1:5) = 0;
+particle_list_before_resampling(1:1000,1:5) = 0;
+weights(1:1000,1:5) = 0;
+iteration_time(1:1000,1:5) = 0;
+
+numbers = [1544814756.35, 1544814933.88, 1544815107.57, 1544815335.77, 1544815521.67, 1544863129.47];
+
+for i = 1:5
+    number = numbers(i);
+    information(i) = load(['../run_monte_carlo_files/testing_box_1_meter_around/information',num2str(number),'.txt']);
+    mocap_pose_after_iteration(i) = load(['../run_monte_carlo_files/testing_box_1_meter_around/_mocap_pose_after_iteration',num2str(number),'.txt']);
+    
+    
+    
+    mocap_pose_after_iteration = [mocap_pose_after_iteration, load(['../run_monte_carlo_files/testing_box_1_meter_around/_mocap_pose_after_iteration',num2str(number),'.txt'])];
+    %mocap_pose_before_iteration = [mocap_pose_before_iteration, load(['../run_monte_carlo_files/testing_box_1_meter_around/_mocap_pose_before_iteration',num2str(number),'.txt'])];
+    %particle_list_after_resampling = [particle_list_after_resampling, load(['../run_monte_carlo_files/testing_box_1_meter_around/_particle_list_after_resampling',num2str(number),'.txt'])];
+    %particle_list_before_resampling = [particle_list_before_resampling, load(['../run_monte_carlo_files/testing_box_1_meter_around/_particle_list_before_resampling',num2str(number),'.txt'])];
+    %weights = [weights, load(['../run_monte_carlo_files/testing_box_1_meter_around/_weights',num2str(number),'.txt'])];
+    %iteration_time = [iteration_time, load(['../run_monte_carlo_files/testing_box_1_meter_around/iteration_time',num2str(number),'.txt'])];
+
+    number_of_particles = information(1);
+    loop_time = information(3);
+
+end
+
+
+
 pose_error_mean = mean(pose_error1, pose_error2, pose_error3, pose_error4, pose_error5);
 
 figure
