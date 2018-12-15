@@ -38,15 +38,17 @@ class MonteCarlo:
 
 
     # parameters
-    _number_of_particles = 200
-    _num_of_measurements = 4 # should be a value of 512 mod(num_measurements) = 0
-    _loop_time = 0.3 # Loop time in seconds
-    _sigma = 1
-    ALFA_1 = 0.001 # rotation
-    ALFA_2 = 0.5 # translation
-    ALFA_3 = 0.5 # translation
-    ALFA_4 = 0.001 # rotation
-    _resample_threshold = _number_of_particles / 2
+    _number_of_particles = 50
+    _num_of_measurements = 8 # should be a value of 512 mod(num_measurements) = 0
+    _loop_time = 0.5 # Loop time in seconds
+    _sigma = 1.5
+    ALFA_1 = 0.00025 # rotation
+    ALFA_2 = 0.2 # translation
+    ALFA_3 = 0.2 # translation
+    ALFA_4 = 0.00025 # rotation
+    _resample_threshold = _number_of_particles / 1.3
+    _initialize_close_to_start = True
+    _distance_around_start = 1
 
     # Lists containing data to write to file
     _iteration_time = []
@@ -55,6 +57,7 @@ class MonteCarlo:
     _particle_list_after_resampling = []
     _mocap_pose_after_iteration = []
     _mocap_pose_before_iteration = []
+    _resample = []
 
     # Optimization parameteres
     rviz = True  # set to true to send particles to rviz
@@ -158,6 +161,10 @@ class MonteCarlo:
                     f.write("%s " % str(element))
                 f.write("\n")
 
+        with open('_resampling' + ending + '.txt', 'w+') as f:
+            for el in self._resample:
+                f.write("%s " % str(el))
+
     def _update_particle_list(self, old_particles, odometry, old_odometry, laser_points, map):
         """
         calculates new particles based on Monte Carlo Localization.
@@ -226,11 +233,15 @@ class MonteCarlo:
             # sample the new particles
             #rospy.loginfo("RESAMPLES")
             particle_list = MonteCarlo.low_variance_sampler(predicted_particles_list, weight_list)
+            self._resample.append(1)
         elif not all_particles_inside_map:
             rospy.loginfo("All particles outside map => RESAMPLE")
             self._particles = []
             self._initialize_particles()
             particle_list = self._particles
+            self._resample.append(1)
+        else:
+            self._resample.append(0)
 
         #else:
             #rospy.loginfo("Doesnt resample!")
@@ -274,8 +285,6 @@ class MonteCarlo:
         x = x_last[0] + delta_trans_hat * math.cos(x_last[2] + delta_rot_1)
         y = x_last[1] + delta_trans_hat * math.sin(x_last[2] + delta_rot_1)
         theta = x_last[2] + delta_rot_1_hat + delta_rot_2_hat
-
-
 
         return x, y, theta
 
@@ -519,15 +528,17 @@ class MonteCarlo:
         grids = self.bresenham(x_0, y_0, x_end, y_end, map, map_occupancy_val)
         #if length of grids equal 1 it mean that bresenham have returned the value to nearest grid and we
         #return this value without further compuations.
+        """
         if len(grids) == 1:
             return grids[0] * self._occupancy_grid_msg.info.resolution
+        """
 
         # find the maximum x and y value the first occupied grid may have.
-
+        #rospy.loginfo("Size of grid" + str(len(grids)))
         # Start going through the grids provided by Bresenham and when we find a grid with higher occupancy probability
         # value we calculate and return the distance to this value
         # We assume that Bresnham returns an array of grids where the distance from x_0 and y_0 increases. TEST THIS
-        for grid in grids:
+        for grid in grids:#[::5]:
             x_1 = grid[0]
             y_1 = grid[1]
             # occupancy value in map of the given grid
@@ -607,7 +618,7 @@ class MonteCarlo:
         y = y_0
         # empty array of grid coordinates
         grids = []
-        distance = 0
+        distance = None
         # iterates over x-coordinates (may be y-coordinates, if is_steep = true)
         # iterates over each x between x_0 and x_end
         # The error first get subtracted
@@ -621,20 +632,36 @@ class MonteCarlo:
             if error < 0:
                 y += y_step
                 error += dx
-            if not swapped:
-                occupancy_val = self.get_occupancy_value(x, y, map)
-                if map_occupancy_val < occupancy_val or occupancy_val == -1:
-                    distance = numpy.sqrt((x-x_0)**2 + (y-y_0)**2)
-                    break
+
 
         # reverse back list if they were reversed.
         if swapped:
             grids.reverse()
-            return grids
+
+        return grids
+
+
+
+        """
+            if not swapped:
+                occupancy_val = self.get_occupancy_value(x, y, map)
+                if map_occupancy_val < occupancy_val or occupancy_val == -1:
+                    if is_steep:
+                        distance = numpy.sqrt((y - x_0) ** 2 + (x - y_0) ** 2)
+                    else:
+                        distance = numpy.sqrt((x - x_0) ** 2 + (y - y_0) ** 2)
+                    break
+                    
+            
         else:
-            #rospy.loginfo("Distance measured using new method")
+            if distance == None:
+                distance = 4.3 # set distance to max
+            # rospy.loginfo("Distance measured using new method")
             distance_list = [distance]
-            return distance_list
+            return distance_list        
+        """
+
+
 
     @staticmethod
     def low_variance_sampler(predicted_particles, weights):
@@ -682,6 +709,15 @@ class MonteCarlo:
 
         # The cell arrays:
         initial_particle_placement = []  # list with initial cells
+
+        if self._initialize_close_to_start:
+            for i in range(0, self._number_of_particles):
+                # TODO: add random values between -self._distance_from start to self._distance_around_start
+                initial_particle_placement.append((15.88 + random.uniform(-self._distance_around_start,\
+                    self._distance_around_start), 15.2400 + random.uniform(-self._distance_around_start,\
+                    self._distance_around_start), random.uniform(0, 2 * math.pi)))
+            self._particles = initial_particle_placement
+            return
 
         if len(self._free_space_list) == 0:
             # add the element numbers that are free
@@ -810,13 +846,15 @@ class MonteCarlo:
 
 if __name__ == '__main__':
     mcl = MonteCarlo()
-    cProfile.run('mcl.loop()','stats')
-    p = pstats.Stats('stats')
+    mcl.loop()
+
+    # cProfile.run('mcl.loop()','stats')
+    #p = pstats.Stats('stats')
 
     # Sort by function taking a lot of time
-    p.strip_dirs().sort_stats('time')
+    #p.strip_dirs().sort_stats('time')
 
     # prints only the 10 most significant lines
-    p.print_stats(20)
+#    p.print_stats(20)
 
 
